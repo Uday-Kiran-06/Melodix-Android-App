@@ -4,12 +4,68 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import '../global.css';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { PlaybackService } from '@/services/TrackPlayerService';
+import TrackPlayer, { AppKilledPlaybackBehavior, Capability } from 'react-native-track-player';
+
+import { AuthProvider, useAuth } from '@/components/AuthContext';
+import { useSettingsStore } from '@/hooks/useSettingsStore';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useRouter, useSegments } from 'expo-router';
+import { useColorScheme as useRNColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+const queryClient = new QueryClient();
+
+function InitialLayout({ loaded }: { loaded: boolean }) {
+  const { session, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading || !loaded) return;
+
+    const authRoutes = ['login', 'signup'];
+    const protectedRoutes = ['liked-songs', 'settings'];
+    const currentRoute = segments[0];
+
+    // Ensure we are in a stable state before redirecting
+    const redirect = (path: string) => {
+      // Use a slightly longer delay to ensure the layout is fully mounted
+      setTimeout(() => {
+        try {
+          router.replace(path as any);
+        } catch (e) {
+          console.error("Redirection error:", e);
+        }
+      }, 50);
+    };
+
+    if (!session && protectedRoutes.includes(currentRoute)) {
+      redirect('/login');
+    } else if (session && authRoutes.includes(currentRoute)) {
+      redirect('/(tabs)');
+    }
+  }, [session, loading, loaded, segments]);
+
+  return (
+    <Stack>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="player" options={{ presentation: 'modal', headerShown: false }} />
+      <Stack.Screen name="liked-songs" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="signup" options={{ headerShown: false }} />
+      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+    </Stack>
+  );
+}
+
 
 export {
   // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -19,6 +75,10 @@ export const unstable_settings = {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+// Global variable to track if TrackPlayer is already setting up or set up
+let isPlayerSettingUp = false;
+let isPlayerInitialized = false;
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -36,22 +96,98 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  useEffect(() => {
+    const setup = async () => {
+      if (isPlayerSettingUp || isPlayerInitialized) return;
+      isPlayerSettingUp = true;
+
+      try {
+        await TrackPlayer.setupPlayer({
+          waitForBuffer: true,
+        });
+        await TrackPlayer.updateOptions({
+          progressUpdateEventInterval: 1,
+          android: {
+            appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+          },
+          alwaysPauseOnInterruption: false,
+          capabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.Stop,
+            Capability.SeekTo,
+          ],
+          compactCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+          ],
+          notificationCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.Stop,
+            Capability.SeekTo,
+          ],
+        });
+
+        isPlayerInitialized = true;
+
+        // Sync downloads
+        try {
+          const { useLibraryStore } = require('@/hooks/useLibraryStore');
+          useLibraryStore.getState().syncDownloadedSongs();
+        } catch (storeErr) {
+          console.warn('Store sync error during setup:', storeErr);
+        }
+      } catch (e: any) {
+        if (e && e.message && e.message.includes('already been initialized')) {
+          isPlayerInitialized = true;
+        } else {
+          console.error('Player setup error:', e);
+        }
+      } finally {
+        isPlayerSettingUp = false;
+      }
+    };
+    setup();
+  }, []);
+
   if (!loaded) {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return <RootLayoutNav loaded={loaded} />;
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+// Guard registration to prevent multiple calls warning
+if (!(global as any).isServiceRegistered) {
+  TrackPlayer.registerPlaybackService(() => PlaybackService);
+  (global as any).isServiceRegistered = true;
+}
+
+function RootLayoutNav({ loaded }: { loaded: boolean }) {
+  const systemColorScheme = useRNColorScheme();
+  const { theme } = useSettingsStore();
+
+  const currentTheme = theme === 'system' ? systemColorScheme : theme;
+  const navigationTheme = currentTheme === 'dark' ? DarkTheme : DefaultTheme;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <AuthProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider value={navigationTheme}>
+              <InitialLayout loaded={loaded} />
+            </ThemeProvider>
+          </QueryClientProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </AuthProvider>
   );
 }

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "melodix",
-    "slug": "melodix",
+    "name": "Melodix",
+    "slug": "Melodix",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,19 +10,30 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "notification": {
+        "icon": "./assets/images/android-icon-monochrome.png",
+        "color": "#000000"
+      },
+      "permissions": [
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ],
+      "package": "com.anonymous.melodix"
     },
     "web": {
       "bundler": "metro",
@@ -30,7 +41,18 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25",
+            "foregroundServiceType": [
+              "mediaPlayback"
+            ]
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,0 +1,6 @@
+{
+    "name": "react-native-worklets",
+    "version": "1.0.0",
+    "main": "index.js",
+    "description": "Shim for react-native-worklets-core to satisfy NativeWind/CSS-Interop"
+}

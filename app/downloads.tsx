@@ -1,0 +1,154 @@
+import GlassCard from '@/components/GlassCard';
+import { useLibraryStore } from '@/hooks/useLibraryStore';
+import { usePlayerStore } from '@/hooks/usePlayerStore';
+import { useSettingsStore } from '@/hooks/useSettingsStore';
+import { jioSaavnService } from '@/services/jiosaavn';
+import { Song } from '@/types/music';
+import { FlashList } from '@shopify/flash-list';
+import * as FileSystem from 'expo-file-system';
+import { Image } from 'expo-image';
+import { Stack, useRouter } from 'expo-router';
+import { ChevronLeft, Download, Play, X } from 'lucide-react-native';
+import React, { memo, useCallback, useEffect } from 'react';
+import { Alert, Text, TouchableOpacity, View } from 'react-native';
+
+const DownloadItem = memo(({ item, onPlay, onDelete, isDark }: any) => (
+    <View className="mb-4">
+        <GlassCard intensity={15}>
+            <View className="p-2 flex-row items-center">
+                <Image
+                    source={jioSaavnService.sanitizeImageUrl(item.image) ? { uri: jioSaavnService.sanitizeImageUrl(item.image) } : require('../assets/images/favicon.png')}
+                    className="w-14 h-14 rounded-lg mr-4"
+                    transition={200}
+                    contentFit="cover"
+                    placeholder={require('../assets/images/favicon.png')}
+                    onError={(e) => console.log(`[Download Image Error]: ${item.id}`, e.error)}
+                />
+                <View className="flex-1">
+                    <Text className={`${isDark ? 'text-white' : 'text-slate-900'} font-bold text-lg`} numberOfLines={1}>
+                        {item.name}
+                    </Text>
+                    <Text className="text-zinc-500" numberOfLines={1}>
+                        {item.artists?.primary?.[0]?.name || item.artist}
+                    </Text>
+                </View>
+                <View className="flex-row">
+                    <TouchableOpacity
+                        onPress={onPlay}
+                        className="bg-emerald-500/20 p-3 rounded-full mr-2"
+                    >
+                        <Play size={20} color="#1DB954" fill="#1DB954" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={onDelete}
+                        className="bg-red-500/10 p-3 rounded-full"
+                    >
+                        <X size={20} color="#ef4444" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </GlassCard>
+    </View>
+));
+
+export default function DownloadsScreen() {
+    const { downloadedSongs, syncDownloadedSongs, setDownloadedSongs } = useLibraryStore();
+    const { playTrack } = usePlayerStore();
+    const { audioQuality, theme } = useSettingsStore();
+    const isDark = theme === 'dark';
+    const router = useRouter();
+
+    useEffect(() => {
+        syncDownloadedSongs();
+    }, [syncDownloadedSongs]);
+
+    const handleDelete = useCallback(async (song: Song) => {
+        Alert.alert(
+            "Delete Download",
+            `Are you sure you want to delete "${song.name}"?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
+                            const fileUri = `${FileSystem.documentDirectory}Melodix/Downloads/${filename}`;
+                            await FileSystem.deleteAsync(fileUri, { idempotent: true });
+
+                            const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;
+                            const updatedMetadata = downloadedSongs.filter(s => s.id !== song.id);
+                            await FileSystem.writeAsStringAsync(metadataFile, JSON.stringify(updatedMetadata));
+
+                            setDownloadedSongs(updatedMetadata);
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to delete file.");
+                        }
+                    }
+                }
+            ]
+        );
+    }, [downloadedSongs, setDownloadedSongs]);
+
+    const handlePlayDownloaded = useCallback(async (song: Song) => {
+        const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
+        const fileUri = `${FileSystem.documentDirectory}Melodix/Downloads/${filename}`;
+
+        const localSong = {
+            ...song,
+            downloadUrl: [{ quality: '320kbps', url: fileUri }]
+        };
+
+        playTrack(localSong, downloadedSongs.map(s => ({
+            ...s,
+            downloadUrl: [{ quality: '320kbps', url: `${FileSystem.documentDirectory}Melodix/Downloads/${s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3` }]
+        })), audioQuality);
+    }, [playTrack, downloadedSongs, audioQuality]);
+
+    const renderItem = useCallback(({ item }: { item: Song }) => (
+        <DownloadItem
+            item={item}
+            onPlay={() => handlePlayDownloaded(item)}
+            onDelete={() => handleDelete(item)}
+            isDark={isDark}
+        />
+    ), [handlePlayDownloaded, handleDelete, isDark]);
+
+    return (
+        <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
+            <Stack.Screen options={{
+                headerShown: true,
+                title: "Downloads",
+                headerTransparent: true,
+                headerTintColor: isDark ? '#fff' : '#000',
+                headerLeft: () => (
+                    <TouchableOpacity onPress={() => router.back()} className="ml-4 p-2 bg-zinc-800/50 rounded-full">
+                        <ChevronLeft size={24} color="#fff" />
+                    </TouchableOpacity>
+                )
+            }} />
+
+            <View className="flex-1 pt-24 px-4">
+                <Text className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-2`}>Downloads</Text>
+                <Text className="text-zinc-500 mb-6">{downloadedSongs.length} songs saved offline</Text>
+
+                {downloadedSongs.length === 0 ? (
+                    <View className="flex-1 items-center justify-center">
+                        <Download size={64} color="#27272a" />
+                        <Text className="text-zinc-500 mt-4 text-center">No downloaded songs yet.{"\n"}Download some to listen offline!</Text>
+                    </View>
+                ) : (
+                    <FlashList
+                        data={downloadedSongs}
+                        renderItem={renderItem}
+                        estimatedItemSize={88}
+                        keyExtractor={(item) => item.id}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: 150 }}
+                    />
+                )}
+            </View>
+        </View>
+    );
+}
