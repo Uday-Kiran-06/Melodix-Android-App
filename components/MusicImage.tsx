@@ -12,6 +12,7 @@ interface MusicImageProps {
     contentFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
     transition?: number;
     placeholder?: any;
+    blurRadius?: number;
 }
 
 export const MusicImage = memo(({
@@ -19,8 +20,9 @@ export const MusicImage = memo(({
     className,
     style,
     contentFit = 'cover',
-    transition = 300,
-    placeholder = DEFAULT_IMAGE
+    transition = 100,
+    placeholder = DEFAULT_IMAGE,
+    blurRadius
 }: MusicImageProps) => {
     const [error, setError] = useState(false);
 
@@ -37,8 +39,9 @@ export const MusicImage = memo(({
                 style={StyleSheet.absoluteFill}
                 contentFit={contentFit}
                 transition={transition}
-                cachePolicy="disk"
+                cachePolicy="memory-disk"
                 placeholder={placeholder}
+                blurRadius={blurRadius}
                 onLoad={() => {
                     if (imageUrl && imageUrl.includes('500x500') && !imageUrl.startsWith('data:')) {
                         // Success!

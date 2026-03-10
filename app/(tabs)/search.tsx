@@ -17,28 +17,32 @@ const AnyFlashList = FlashList as any;
 
 const { width } = Dimensions.get('window');
 
-const SongItem = memo(({ item, isLiked, onPlay, onToggleLike, isDark }: any) => (
-  <View className="mb-4 flex-row items-center">
-    <TouchableOpacity onPress={onPlay} className="flex-1 flex-row items-center">
-      <MusicImage
-        images={item}
-        className="w-14 h-14 rounded-lg mr-4"
-      />
-      <View className="flex-1">
-        <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-semibold`} numberOfLines={1}>{item.name}</Text>
-        <Text className="text-gray-400 text-sm" numberOfLines={1}>{item.artists?.primary?.[0]?.name || item.artist}</Text>
-      </View>
-      <Play size={20} color="#1DB954" fill="#1DB954" />
-    </TouchableOpacity>
-    <TouchableOpacity onPress={onToggleLike} className="p-2 ml-4">
-      {isLiked ? (
-        <CheckCircle2 size={24} color="#1DB954" />
-      ) : (
-        <Plus size={24} color={isDark ? "#71717a" : "#94a3b8"} />
-      )}
-    </TouchableOpacity>
-  </View>
-));
+const SongItem = memo(({ item, onPlay, onToggleLike, isDark, results }: any) => {
+  const isLiked = useLibraryStore(state => state.likedSongs.some((s: any) => s.id === item.id));
+
+  return (
+    <View className="mb-4 flex-row items-center">
+      <TouchableOpacity onPress={() => onPlay?.(item, results)} className="flex-1 flex-row items-center">
+        <MusicImage
+          images={item}
+          className="w-14 h-14 rounded-lg mr-4"
+        />
+        <View className="flex-1">
+          <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-semibold`} numberOfLines={1}>{item.name}</Text>
+          <Text className="text-gray-400 text-sm" numberOfLines={1}>{item.artists?.primary?.[0]?.name || item.artist}</Text>
+        </View>
+        <Play size={20} color="#1DB954" fill="#1DB954" />
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => onToggleLike?.(item)} className="p-2 ml-4">
+        {isLiked ? (
+          <CheckCircle2 size={24} color="#1DB954" />
+        ) : (
+          <Plus size={24} color={isDark ? "#71717a" : "#94a3b8"} />
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+});
 
 const AlbumItem = memo(({ item, onPress, isDark }: any) => (
   <TouchableOpacity
@@ -85,7 +89,7 @@ export default function SearchScreen() {
   }, [query]);
 
   const { playTrack } = usePlayerStore();
-  const { toggleLike, isLiked } = useLibraryStore();
+  const toggleLike = useLibraryStore(state => state.toggleLike);
   const { user } = useAuth();
   const { audioQuality, theme } = useSettingsStore();
   const { recentlyPlayedTracks, clearRecentlyPlayed, addSearchQuery } = useHistoryStore();
@@ -98,6 +102,10 @@ export default function SearchScreen() {
     }
     playTrack(item, results || [], audioQuality);
   }, [query, playTrack, audioQuality, addSearchQuery]);
+
+  const handleToggleLike = useCallback((item: any) => {
+    toggleLike(item, user?.id);
+  }, [toggleLike, user?.id]);
 
   const handleSearchNavigation = useCallback((q: string) => {
     const decodedQ = jioSaavnService.decodeHtml(q);
@@ -171,10 +179,10 @@ export default function SearchScreen() {
         return (
           <SongItem
             item={item}
-            isLiked={isLiked(item.id)}
-            onPlay={() => handleSongPress(item, item.type === 'recent-song' ? recentlyPlayedTracks : songs)}
-            onToggleLike={() => toggleLike(item, user?.id)}
+            onPlay={handleSongPress}
+            onToggleLike={handleToggleLike}
             isDark={isDark}
+            results={item.type === 'recent-song' ? recentlyPlayedTracks : songs}
           />
         );
       case 'section-header':
@@ -230,7 +238,7 @@ export default function SearchScreen() {
       default:
         return null;
     }
-  }, [isDark, isLiked, handleSongPress, recentlyPlayedTracks, songs, toggleLike, user?.id, handleSearchNavigation, clearRecentlyPlayed]);
+  }, [isDark, handleSongPress, recentlyPlayedTracks, songs, handleToggleLike, handleSearchNavigation, clearRecentlyPlayed]);
 
   return (
     <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'} pt-12 px-4`}>

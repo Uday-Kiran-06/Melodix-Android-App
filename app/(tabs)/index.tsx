@@ -1,7 +1,6 @@
 import { useAuth } from '@/components/AuthContext';
 import GlassCard from '@/components/GlassCard';
 import { MusicImage } from '@/components/MusicImage';
-import { Shimmer } from '@/components/Shimmer';
 import { useHistoryStore } from '@/hooks/useHistoryStore';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import {
@@ -70,7 +69,7 @@ const SongCard = memo(({ item, onPress, isDark, type = 'square' }: { item: any; 
   }
 
   return (
-    <TouchableOpacity onPress={onPress} className="mr-5">
+    <TouchableOpacity onPress={onPress} className="mr-5 nest-ignore">
       <View style={{ width: type === 'circle' ? 110 : 140 }}>
         <View
           className={`${type === 'circle' ? 'w-24 h-24 rounded-full' : 'w-full h-36 rounded-2xl'} mb-2 shadow-sm overflow-hidden ${isDark ? 'bg-zinc-900' : 'bg-slate-200'}`}
@@ -129,7 +128,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { fetchLibrary, likedSongs = [] } = useLibraryStore();
   const { theme } = useSettingsStore();
-  const { recentlyPlayedItems = [] } = useHistoryStore();
+  const { recentlyPlayedItems = [], recentKeywords: searchHistory = [] } = useHistoryStore();
   const [activeFilter, setActiveFilter] = useState('All');
   const isDark = theme === 'dark';
 
@@ -141,9 +140,7 @@ export default function HomeScreen() {
     router.push({ pathname: '/search', params: { q: query } });
   }, [router]);
 
-  // "All" View Data
-  const { recentKeywords: searchHistory = [] } = useHistoryStore();
-
+  // Data Queries
   const trendingQuery = useTrending();
   const trending = trendingQuery.data || [];
 
@@ -190,23 +187,11 @@ export default function HomeScreen() {
   const likedRecommendationsQuery = useLikedRecommendations(lastLikedSong?.id || null);
   const likedRecommendations = likedRecommendationsQuery.data || [];
 
-  // "Music" View Data (Infinite)
+  // "Music" & "Podcasts" View Data (Infinite)
   const infiniteSongs = useInfiniteSongs('trending telugu songs 2024');
-
-  // "Podcasts" View Data (Infinite)
   const infinitePodcasts = useInfinitePodcasts();
 
   useEffect(() => {
-    const runDiagnostics = async () => {
-      console.log("[Diagnostics]: Starting startup connectivity check...");
-      const isOnline = await jioSaavnService.checkConnectivity();
-      if (!isOnline) {
-        console.warn("[Diagnostics]: App started without internet reachability to google.com");
-      } else {
-        console.log("[Diagnostics]: Internet reachability confirmed.");
-      }
-    };
-    runDiagnostics();
     if (user) fetchLibrary(user.id);
   }, [user]);
 
@@ -234,11 +219,58 @@ export default function HomeScreen() {
 
   const gridItems = useMemo(() => {
     const items = [
-      { id: 'liked-songs', name: 'Liked Songs', type: 'special' },
+      { id: 'liked-songs', name: 'Liked Songs' },
       ...recentlyPlayedItems
     ];
     return items.slice(0, 6);
   }, [recentlyPlayedItems]);
+
+  const allViewData = useMemo(() => [
+    { type: 'quick_access', id: 'quick_access' },
+    { type: 'section', id: 'trending', title: 'Trending Now', data: trending },
+    { type: 'section', id: 'liked_recommendations', title: 'Recommended for You', data: likedRecommendations, enabled: likedRecommendations.length > 0 },
+    { type: 'section', id: 'new_releases', title: 'New Releases', data: newReleases },
+    { type: 'section', id: 'smart_recommendations', title: 'Based on your Search', data: smartRecommendations, enabled: smartRecommendations.length > 0 },
+    { type: 'section', id: 'artist_songs', title: 'Top Hits by DSP', data: artistSongs },
+    { type: 'section', id: 'featured_playlists', title: 'Popular Playlists', data: featuredPlaylists },
+    { type: 'section', id: 'movie_albums', title: 'New Movie Albums', data: movieAlbums },
+    { type: 'section', id: 'english_hits', title: 'English Pop Hits', data: englishHits },
+    { type: 'section', id: 'ar_rahman', title: 'A.R. Rahman Hits', data: arRahmanHits },
+    { type: 'section', id: 'taylor_swift', title: 'Taylor Swift Collection', data: taylorSwiftHits },
+    { type: 'section', id: 'romantic', title: 'Romantic Hits', data: romanticSongs },
+    { type: 'section', id: 'retro', title: 'Retro Classics', data: retroTelugu },
+    { type: 'section', id: 'happy', title: 'Happy Vibes', data: happySongs },
+    { type: 'section', id: 'singles', title: 'Latest Singles', data: singlesSongs },
+  ].filter(s => s.enabled !== false), [
+    trending, likedRecommendations, newReleases, smartRecommendations,
+    artistSongs, featuredPlaylists, movieAlbums, englishHits,
+    arRahmanHits, taylorSwiftHits, romanticSongs, retroTelugu,
+    happySongs, singlesSongs
+  ]);
+
+  const HorizontalSection = memo(({ title, data, isDark, type = 'square' }: any) => (
+    <View className="mb-8">
+      <SectionHeader title={title} isDark={isDark} />
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        data={data}
+        keyExtractor={(item, index) => `${item.id || item.name || index}`}
+        renderItem={({ item }) => (
+          <SongCard
+            item={item}
+            onPress={() => item.type === 'album' || item.type === 'playlist' ? handleSearchPress(item.name || item.title) : handleSongPress(item.id)}
+            isDark={isDark}
+            type={type}
+          />
+        )}
+        contentContainerStyle={{ paddingHorizontal: 20 }}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        removeClippedSubviews={true}
+      />
+    </View>
+  ));
 
   const renderFilterChips = () => (
     <View className="flex-row px-5 mb-6">
@@ -256,284 +288,70 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderSkeleton = () => (
-    <View className="px-5">
-      <View className="mb-8">
-        <Shimmer width={200} height={24} className="mb-4" />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {[1, 2, 3].map((i) => (
-            <View key={i} className="mr-4">
-              <Shimmer width={140} height={140} borderRadius={12} className="mb-2" />
-              <Shimmer width={100} height={16} className="mb-1" />
-              <Shimmer width={80} height={12} />
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-    </View>
-  );
-
   const renderHeader = () => (
     <View className="pt-16">
-      <View className="px-5 flex-row items-center justify-between mb-2">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.push('/settings')} className="mr-3">
-            <View className="w-9 h-9 rounded-full overflow-hidden">
-              {user?.user_metadata?.avatar_url ? (
-                <ExpoImage
-                  source={{ uri: user.user_metadata.avatar_url }}
-                  className="w-full h-full"
-                />
-              ) : (
-                <View className="w-full h-full bg-pink-500 items-center justify-center">
-                  <Text className="text-white font-bold text-lg">{user?.user_metadata?.full_name?.[0] || 'U'}</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
+      <View className="px-5 flex-row items-center justify-between mb-4">
+        <TouchableOpacity onPress={() => router.push('/settings')}>
+          <View className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 items-center justify-center">
+            {user?.user_metadata?.avatar_url ? (
+              <ExpoImage source={{ uri: user.user_metadata.avatar_url }} className="w-full h-full" />
+            ) : (
+              <Text className="text-white font-bold">{user?.user_metadata?.full_name?.[0] || 'U'}</Text>
+            )}
+          </View>
+        </TouchableOpacity>
       </View>
       {renderFilterChips()}
     </View>
   );
 
-  const renderAllView = () => (
-    <View>
-      {/* Greeting and Quick Access Grid */}
-      <View className="px-5 mb-8">
-        <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-4`}>{currentGreeting}</Text>
-        <View className="flex-row flex-wrap -m-1">
-          {gridItems.map((item: any) => (
-            <TouchableOpacity
-              key={item.id}
-              onPress={() => item.id === 'liked-songs' ? router.push('/liked-songs') : handleSongPress(item.id)}
-              className={`w-[48%] h-14 ${isDark ? 'bg-zinc-900/80' : 'bg-white'} rounded-md overflow-hidden m-1 flex-row items-center shadow-sm`}
-            >
-              {item.id === 'liked-songs' ? (
-                <LinearGradient colors={['#450eff', '#89d7fb']} className="w-14 h-14 items-center justify-center">
-                  <Text className="text-white text-xl">♥</Text>
-                </LinearGradient>
-              ) : (
-                <View className={`w-14 h-14 ${isDark ? 'bg-zinc-800' : 'bg-slate-100'}`}>
-                  <MusicImage
-                    images={getImageUrl(item)}
-                    className="w-full h-full"
-                  />
-                </View>
-              )}
-              <Text className={`flex-1 px-2 text-[11px] font-bold ${isDark ? 'text-white' : 'text-slate-900'}`} numberOfLines={2}>
-                {item?.name || item?.title || "Unknown"}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Music Sections */}
-      {likedSongs.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Your Liked Songs" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {likedSongs.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {lastLikedSong && (likedRecommendationsQuery.isLoading ? renderSkeleton() : likedRecommendations.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title={`Because you liked ${lastLikedSong.name}`} isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {likedRecommendations.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      ))}
-
-      {smartRecommendationsQuery.isLoading ? renderSkeleton() : smartRecommendations.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Top Telugu Hits for You" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {smartRecommendations.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-
-      {smartAlbumsQuery.isLoading ? renderSkeleton() : smartAlbums.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Recommended Albums for You" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {smartAlbums.slice(0, 10).map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSearchPress(item.name)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {arRahmanHitsQuery.isLoading ? renderSkeleton() : arRahmanHits.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="AR Rahman Classics" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {arRahmanHits.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {artistSongsQuery.isLoading ? renderSkeleton() : artistSongs.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Top Hits of Devi Sri Prasad" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {artistSongs.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {featuredPlaylistsQuery.isLoading ? renderSkeleton() : featuredPlaylists.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Telugu Popular" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {featuredPlaylists.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSearchPress(item.name)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {newReleasesQuery.isLoading ? renderSkeleton() : newReleases.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="New Telugu Releases" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {newReleases.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {englishHitsQuery.isLoading ? renderSkeleton() : englishHits.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Top English Pop" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {englishHits.slice(0, 10).map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {trendingQuery.isLoading ? renderSkeleton() : trending.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Trending in Telugu" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {trending.slice(0, 10).map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} type="rectangle" />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {taylorSwiftHitsQuery.isLoading ? renderSkeleton() : taylorSwiftHits.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Taylor Swift Special" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {taylorSwiftHits.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {romanticSongsQuery.isLoading ? renderSkeleton() : romanticSongs.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Romantic Telugu Melodies" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {romanticSongs.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {happySongsQuery.isLoading ? renderSkeleton() : happySongs.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Happy Telugu Vibes" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {happySongs.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {retroTeluguQuery.isLoading ? renderSkeleton() : retroTelugu.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Retro Telugu Golden Hits" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {retroTelugu.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {singlesSongsQuery.isLoading ? renderSkeleton() : singlesSongs.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Singles & Latest Hits" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {singlesSongs.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {movieAlbumsQuery.isLoading ? renderSkeleton() : movieAlbums.length > 0 && (
-        <View className="mb-12">
-          <SectionHeader title="Latest Telugu Movie Albums" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {movieAlbums.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => handleSearchPress(item.name)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-    </View>
-  );
+  const renderAllItem = useCallback(({ item }: any) => {
+    switch (item.type) {
+      case 'quick_access':
+        return (
+          <View className="px-5 mb-8">
+            <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-4`}>{currentGreeting}</Text>
+            <View className="flex-row flex-wrap -m-1">
+              {gridItems.map((gItem: any) => (
+                <TouchableOpacity
+                  key={gItem.id}
+                  onPress={() => gItem.id === 'liked-songs' ? router.push('/liked-songs') : handleSongPress(gItem.id)}
+                  className={`w-[48%] h-14 ${isDark ? 'bg-zinc-900/80' : 'bg-white'} rounded-md overflow-hidden m-1 flex-row items-center shadow-sm`}
+                >
+                  {gItem.id === 'liked-songs' ? (
+                    <LinearGradient colors={['#450eff', '#89d7fb']} className="w-14 h-14 items-center justify-center">
+                      <Text className="text-white text-xl">♥</Text>
+                    </LinearGradient>
+                  ) : (
+                    <View className={`w-14 h-14 ${isDark ? 'bg-zinc-800' : 'bg-slate-100'}`}>
+                      <MusicImage images={getImageUrl(gItem)} className="w-full h-full" />
+                    </View>
+                  )}
+                  <Text className={`ml-3 flex-1 font-bold text-xs ${isDark ? 'text-white' : 'text-slate-800'}`} numberOfLines={2}>
+                    {gItem.name || gItem.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+      case 'section':
+        if (!item.data || item.data.length === 0) return null;
+        return (
+          <HorizontalSection
+            title={item.title}
+            data={item.data}
+            isDark={isDark}
+            type={item.id === 'movie_albums' || item.id === 'featured_playlists' ? 'rectangle' : 'square'}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [isDark, currentGreeting, gridItems, handleSongPress, router]);
 
   const renderMusicHeader = () => (
     <View>
-      {/* Quick Access sections repeated or specifically music focused */}
-      {smartRecommendationsQuery.isLoading ? renderSkeleton() : smartRecommendations.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Top Telugu Hits for You" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {smartRecommendations.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => router.push(`/song/${item.id}` as any)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {smartAlbumsQuery.isLoading ? renderSkeleton() : smartAlbums.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Top Albums" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {smartAlbums.slice(0, 8).map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => router.push({ pathname: '/search', params: { q: item.name } })} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
       <View className="mb-8">
         <SectionHeader title="Featured Artists" isDark={isDark} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
@@ -541,92 +359,32 @@ export default function HomeScreen() {
             <SongCard
               key={index}
               item={{ name: artist, image: [{ url: `https://ui-avatars.com/api/?name=${artist}&background=10b981&color=fff` }] }}
-              onPress={() => router.push({ pathname: '/search', params: { q: artist } })}
+              onPress={() => handleSearchPress(artist)}
               isDark={isDark}
               type="circle"
             />
           ))}
         </ScrollView>
       </View>
-
-      {newReleasesQuery.isLoading ? renderSkeleton() : newReleases.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="New Telugu Releases" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {newReleases.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => router.push(`/song/${item.id}` as any)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {trendingQuery.isLoading ? renderSkeleton() : trending.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Trending in Telugu" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {trending.slice(0, 10).map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => router.push(`/song/${item.id}` as any)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {romanticSongsQuery.isLoading ? renderSkeleton() : romanticSongs.length > 0 && (
-        <View className="mb-8">
-          <SectionHeader title="Romantic Telugu Melodies" isDark={isDark} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-            {romanticSongs.map((item: any, index: number) => (
-              <SongCard key={item?.id || index} item={item} onPress={() => router.push(`/song/${item.id}` as any)} isDark={isDark} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
       <View className="px-5 mb-4">
-        <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Popular Songs</Text>
+        <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Popular Tracks</Text>
       </View>
     </View>
   );
 
-  const renderPodcastHeader = () => {
-    const firstPage = infinitePodcasts.data?.pages?.[0] || [];
-    return (
-      <View>
-        <View className="px-5 mb-6">
-          <GlassCard intensity={20}>
-            <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-1`}>Explore Podcasts</Text>
-            <Text className="text-zinc-500 text-sm">Discover stories, news, and more from around the world.</Text>
-          </GlassCard>
-        </View>
-
-        {firstPage.length > 0 && (
-          <View className="mb-8">
-            <SectionHeader title="Trending Podcasts" isDark={isDark} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-              {firstPage.slice(0, 10).map((item: any, index: number) => (
-                <SongCard key={item?.id || index} item={item} onPress={() => router.push(`/song/${item.id}` as any)} isDark={isDark} type="rectangle" />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {firstPage.length > 10 && (
-          <View className="mb-8">
-            <SectionHeader title="Featured Shows" isDark={isDark} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-              {firstPage.slice(10, 20).map((item: any, index: number) => (
-                <SongCard key={item?.id || index} item={item} onPress={() => router.push(`/song/${item.id}` as any)} isDark={isDark} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        <View className="px-5 mb-4">
-          <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Popular Episodes</Text>
-        </View>
+  const renderPodcastHeader = () => (
+    <View>
+      <View className="px-5 mb-6">
+        <GlassCard intensity={20}>
+          <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-1`}>Explore Podcasts</Text>
+          <Text className="text-zinc-500 text-sm">Discover stories and insights from around the world.</Text>
+        </GlassCard>
       </View>
-    );
-  };
+      <View className="px-5 mb-4">
+        <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Recent Episodes</Text>
+      </View>
+    </View>
+  );
 
   if (activeFilter === 'Music') {
     const data = infiniteSongs.data?.pages.flatMap(page => page) || [];
@@ -635,7 +393,7 @@ export default function HomeScreen() {
         <FlatList
           data={data}
           keyExtractor={(item, index) => item.id + index}
-          renderItem={({ item }: { item: any }) => <SongListItem item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />}
+          renderItem={({ item }) => <SongListItem item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />}
           ListHeaderComponent={() => (
             <>
               {renderHeader()}
@@ -644,10 +402,6 @@ export default function HomeScreen() {
           )}
           onEndReached={() => infiniteSongs.hasNextPage && infiniteSongs.fetchNextPage()}
           onEndReachedThreshold={0.5}
-          removeClippedSubviews={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
           ListFooterComponent={() => (
             infiniteSongs.isFetchingNextPage ? <ActivityIndicator size="small" color="#10b981" className="py-4" /> : <View className="h-32" />
           )}
@@ -663,7 +417,7 @@ export default function HomeScreen() {
         <FlatList
           data={data}
           keyExtractor={(item, index) => item.id + index}
-          renderItem={({ item }: { item: any }) => <SongListItem item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />}
+          renderItem={({ item }) => <SongListItem item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />}
           ListHeaderComponent={() => (
             <>
               {renderHeader()}
@@ -672,10 +426,6 @@ export default function HomeScreen() {
           )}
           onEndReached={() => infinitePodcasts.hasNextPage && infinitePodcasts.fetchNextPage()}
           onEndReachedThreshold={0.5}
-          removeClippedSubviews={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
           ListFooterComponent={() => (
             infinitePodcasts.isFetchingNextPage ? <ActivityIndicator size="small" color="#10b981" className="py-4" /> : <View className="h-32" />
           )}
@@ -686,13 +436,18 @@ export default function HomeScreen() {
 
   return (
     <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
-      <ScrollView
+      <FlatList
+        data={allViewData}
+        renderItem={renderAllItem}
+        keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
-      >
-        {renderHeader()}
-        {renderAllView()}
-      </ScrollView>
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={<View className="h-32" />}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+        removeClippedSubviews={true}
+      />
     </View>
   );
 }

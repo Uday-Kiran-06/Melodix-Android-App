@@ -33,9 +33,18 @@ export const PlaybackService = async function () {
             if (event.paused) {
                 await TrackPlayer.pause();
             } else {
-                // When paused is false and not permanent, it's either an unduck 
-                // or a transient interruption that has ended.
-                await TrackPlayer.play();
+                // If it's a ducking event, lower the volume
+                if ((event as any).ducking) {
+                    await TrackPlayer.setVolume(0.3);
+                } else {
+                    // Otherwise, restore the volume
+                    await TrackPlayer.setVolume(1);
+                    // And ensure playback continues if it was transiently paused
+                    const state = await TrackPlayer.getState();
+                    if (state !== State.Playing) {
+                        await TrackPlayer.play();
+                    }
+                }
             }
         }
     });

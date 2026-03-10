@@ -79,7 +79,9 @@ export const useArtistSongs = (artistName: string = 'Devi Sri Prasad') => {
     return useQuery({
         queryKey: ['artist-songs', artistName],
         queryFn: () => jioSaavnService.searchSongs(`${artistName} latest hits`),
-        enabled: !!artistName
+        enabled: !!artistName,
+        staleTime: 1000 * 60 * 60,
+        gcTime: 1000 * 60 * 60 * 24,
     });
 };
 
@@ -87,7 +89,9 @@ export const useMoodMusic = (mood: string) => {
     return useQuery({
         queryKey: ['mood-music', mood],
         queryFn: () => jioSaavnService.searchSongs(`${mood} telugu hits`),
-        enabled: !!mood
+        enabled: !!mood,
+        staleTime: 1000 * 60 * 30,
+        gcTime: 1000 * 60 * 60 * 24,
     });
 };
 
@@ -95,7 +99,9 @@ export const useRecommendations = (songId: string) => {
     return useQuery({
         queryKey: ['recommendations', songId],
         queryFn: () => jioSaavnService.getRecommendations(songId),
-        enabled: !!songId
+        enabled: !!songId,
+        staleTime: 1000 * 60 * 15,
+        gcTime: 1000 * 60 * 60 * 24,
     });
 };
 
@@ -109,14 +115,18 @@ export const useHomeModules = () => {
 export const useMovieAlbums = () => {
     return useQuery({
         queryKey: ['movie-albums'],
-        queryFn: () => jioSaavnService.searchAlbums('latest telugu movie albums 2024')
+        queryFn: () => jioSaavnService.searchAlbums('latest telugu movie albums 2024'),
+        staleTime: 1000 * 60 * 60 * 6,
+        gcTime: 1000 * 60 * 60 * 48,
     });
 };
 
 export const useFeaturedPlaylists = () => {
     return useQuery({
         queryKey: ['featured-playlists'],
-        queryFn: () => jioSaavnService.searchPlaylists('telugu popular playlists')
+        queryFn: () => jioSaavnService.searchPlaylists('telugu popular playlists'),
+        staleTime: 1000 * 60 * 60 * 12,
+        gcTime: 1000 * 60 * 60 * 48,
     });
 };
 
@@ -131,14 +141,18 @@ export const useSmartAlbums = (keywords: string[]) => {
     const query = keywords.length > 0 ? keywords.join(' ') + ' latest telugu albums' : 'latest telugu movie albums 2024';
     return useQuery({
         queryKey: ['smart-albums', query],
-        queryFn: () => jioSaavnService.searchAlbums(query)
+        queryFn: () => jioSaavnService.searchAlbums(query),
+        staleTime: 1000 * 60 * 60 * 6,
+        gcTime: 1000 * 60 * 60 * 48,
     });
 };
 
 export const useEnglishHits = () => {
     return useQuery({
         queryKey: ['english-hits'],
-        queryFn: () => jioSaavnService.searchSongs('top english pop hits 2024', 'english')
+        queryFn: () => jioSaavnService.searchSongs('top english pop hits 2024', 'english'),
+        staleTime: 1000 * 60 * 60 * 12,
+        gcTime: 1000 * 60 * 60 * 48,
     });
 };
 
@@ -152,14 +166,18 @@ export const useGlobalTrending = () => {
 export const useRetroTelugu = () => {
     return useQuery({
         queryKey: ['retro-telugu'],
-        queryFn: () => jioSaavnService.searchSongs('90s telugu golden hits', 'telugu')
+        queryFn: () => jioSaavnService.searchSongs('90s telugu golden hits', 'telugu'),
+        staleTime: 1000 * 60 * 60 * 24,
+        gcTime: 1000 * 60 * 60 * 72,
     });
 };
 
 export const useMusicCategory = (name: string, query: string, lang: string = 'telugu,english') => {
     return useQuery({
         queryKey: ['music-category', name],
-        queryFn: () => jioSaavnService.searchSongs(query, lang)
+        queryFn: () => jioSaavnService.searchSongs(query, lang),
+        staleTime: 1000 * 60 * 60 * 6,
+        gcTime: 1000 * 60 * 60 * 24,
     });
 };
 export const useLikedRecommendations = (songId: string | null) => {

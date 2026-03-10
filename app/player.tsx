@@ -1,4 +1,5 @@
 import { useAuth } from '@/components/AuthContext';
+import { MusicImage } from '@/components/MusicImage';
 import PlaylistModal from '@/components/PlaylistModal';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
@@ -7,7 +8,6 @@ import { jioSaavnService } from '@/services/jiosaavn';
 import Slider from '@react-native-community/slider';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -179,13 +179,11 @@ export default function PlayerScreen() {
 
     return (
         <View className="flex-1 bg-black">
-            <Image
-                source={getImageUrl(currentTrack) ? { uri: getImageUrl(currentTrack) } : require('../assets/images/favicon.png')}
+            <MusicImage
+                images={getImageUrl(currentTrack)}
                 className="absolute w-full h-full opacity-50"
                 blurRadius={50}
                 transition={500}
-                cachePolicy="disk"
-                onError={(e) => console.log(`[Player Background Error]: ${currentTrack.id}`, e.error)}
             />
 
             <LinearGradient
@@ -214,13 +212,11 @@ export default function PlayerScreen() {
                         style={{ width: width - 64, height: width - 64 }}
                         className="rounded-2xl overflow-hidden bg-zinc-900"
                     >
-                        <Image
-                            source={getImageUrl(currentTrack) ? { uri: getImageUrl(currentTrack) } : require('../assets/images/favicon.png')}
+                        <MusicImage
+                            images={getImageUrl(currentTrack)}
                             className="w-full h-full"
                             transition={300}
                             contentFit="cover"
-                            cachePolicy="disk"
-                            onError={(e) => console.log(`[Player Main Image Error]: ${currentTrack.id}`, e.error)}
                         />
                     </View>
                 </View>
@@ -325,12 +321,11 @@ export default function PlayerScreen() {
                     <View className="bg-zinc-900 p-6 rounded-t-3xl border-t border-zinc-800">
                         <View className="items-center mb-6">
                             <View className="w-12 h-1.5 bg-zinc-700 rounded-full mb-6" />
-                            <Image
-                                source={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image) ? { uri: jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image) } : require('../assets/images/favicon.png')}
+                            <MusicImage
+                                images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
                                 className="w-24 h-24 rounded-lg mb-4"
                                 transition={300}
                                 contentFit="cover"
-                                onError={(e) => console.log(`[Player Menu Image Error]: ${currentTrack.id}`, e.error)}
                             />
                             <Text className="text-white text-xl font-bold text-center" numberOfLines={1}>{currentTrack.title}</Text>
                             <Text className="text-zinc-500 text-lg text-center" numberOfLines={1}>{currentTrack.artist}</Text>
@@ -505,11 +500,10 @@ export default function PlayerScreen() {
                             <>
                                 <Text className="text-emerald-500 font-bold mb-4">Now Playing</Text>
                                 <View className="flex-row items-center mb-8 bg-zinc-900/50 p-3 rounded-xl">
-                                    <Image
-                                        source={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image) ? { uri: jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image) } : require('../assets/images/favicon.png')}
+                                    <MusicImage
+                                        images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
                                         className="w-14 h-14 rounded-lg mr-4"
                                         transition={300}
-                                        onError={(e) => console.log(`[Queue Current Track Error]: ${currentTrack.id}`, e.error)}
                                     />
                                     <View className="flex-1">
                                         <Text className="text-white font-bold text-lg" numberOfLines={1}>{currentTrack.title}</Text>
@@ -529,11 +523,10 @@ export default function PlayerScreen() {
                                     className="flex-row items-center mb-4"
                                     onPress={() => handleSkipToTrack(index)}
                                 >
-                                    <Image
-                                        source={jioSaavnService.sanitizeImageUrl(track.artwork || track.image) ? { uri: jioSaavnService.sanitizeImageUrl(track.artwork || track.image) } : require('../assets/images/favicon.png')}
+                                    <MusicImage
+                                        images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
                                         className="w-12 h-12 rounded-md mr-4"
                                         transition={300}
-                                        onError={(e) => console.log(`[Queue Next Track Error]: ${track.id}`, e.error)}
                                     />
                                     <View className="flex-1">
                                         <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>

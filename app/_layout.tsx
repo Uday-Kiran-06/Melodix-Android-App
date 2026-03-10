@@ -17,7 +17,17 @@ import { useColorScheme as useRNColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 60,      // 1 hour global default
+      gcTime: 1000 * 60 * 60 * 24,    // 24 hour garbage collection
+      retry: 1,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: 'always',
+    },
+  },
+});
 
 function InitialLayout({ loaded }: { loaded: boolean }) {
   const { session, loading } = useAuth();
@@ -109,8 +119,8 @@ export default function RootLayout() {
           progressUpdateEventInterval: 1,
           android: {
             appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+            alwaysPauseOnInterruption: false,
           },
-          alwaysPauseOnInterruption: false,
           capabilities: [
             Capability.Play,
             Capability.Pause,
@@ -118,6 +128,8 @@ export default function RootLayout() {
             Capability.SkipToPrevious,
             Capability.Stop,
             Capability.SeekTo,
+            Capability.JumpForward,
+            Capability.JumpBackward,
           ],
           compactCapabilities: [
             Capability.Play,
@@ -133,9 +145,19 @@ export default function RootLayout() {
             Capability.Stop,
             Capability.SeekTo,
           ],
+          forwardJumpInterval: 10,
+          backwardJumpInterval: 10,
         });
 
         isPlayerInitialized = true;
+
+        // Restore previous session if available
+        try {
+          const { usePlayerStore } = require('@/hooks/usePlayerStore');
+          await usePlayerStore.getState().initPlayer();
+        } catch (initErr) {
+          console.warn('Player init restoration error:', initErr);
+        }
 
         // Sync downloads
         try {
