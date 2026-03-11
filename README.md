@@ -12,29 +12,10 @@ Melodix is a premium, high-performance music streaming application built with Re
       <td><img src=![Uploading WhatsApp Image 2026-03-11 at 10.37.02 PM.jpeg…]() /></td>
     </tr>
     <tr>
-      <td align="center"><b>Home</b></td>
-      <td align="center"><b>Player</b></td>
-      <td align="center"><b>Search</b></td>
-    </tr>
-    <tr>
       <td><img src=![WhatsApp Image 2026-03-11 at 10 36 53 PM](https://github.com/user-attachments/assets/3d7cc7a5-e3d2-4799-9532-5e05db890e0a) /></td>
       <td><img src=![WhatsApp Image 2026-03-11 at 10 36 51 PM](https://github.com/user-attachments/assets/4dafcb35-ee6e-49a7-b594-beffb0f2ea66) /></td>
       <td><img src=![WhatsApp Image 2026-03-11 at 10 36 52 PM](https://github.com/user-attachments/assets/bda5c38e-a4ff-4650-bce9-d7e9caaf9a8b) /></td>
     </tr>
-    <tr>
-      <td align="center"><b>Audio Effects</b></td>
-      <td align="center"><b>Liked Songs</b></td>
-      <td align="center"><b>Downloads</b></td>
-    </tr>
-    <tr>
-      <td></td>
-    </tr>
-    <tr>
-      <td align="center"><b>Settings</b></td>
-      <td></td>
-      <td></td>
-    </tr>
-  </table>
 </div>
 
 ## ✨ Key Features
