@@ -22,9 +22,9 @@ const SongRow = memo(({ song, onPlay, onToggleLike, isDark }: any) => (
     >
         <GlassCard intensity={20}>
             <View className="flex-row items-center p-3">
-                {song?.image?.[0]?.url ? (
+                {jioSaavnService.sanitizeImageUrl(song.image) ? (
                     <Image
-                        source={jioSaavnService.sanitizeImageUrl(song.image) ? { uri: jioSaavnService.sanitizeImageUrl(song.image) } : require('../assets/images/favicon.png')}
+                        source={{ uri: jioSaavnService.sanitizeImageUrl(song.image) as string }}
                         className="w-12 h-12 rounded-lg mr-4"
                         transition={200}
                         contentFit="cover"

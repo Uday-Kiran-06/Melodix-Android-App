@@ -98,6 +98,11 @@ export default function PlayerScreen() {
         if (!currentTrack || !currentTrack.url) return;
 
         try {
+            if (!currentTrack.url) {
+                Alert.alert("Error", "Song URL is missing. Cannot download.");
+                return;
+            }
+
             setDownloadProgress(0);
             
             const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
@@ -106,15 +111,22 @@ export default function PlayerScreen() {
                 await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
             }
 
-            const filename = `${(currentTrack.title || 'song').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
+            // More aggressive filename sanitization
+            const cleanTitle = (currentTrack.title || 'song')
+                .replace(/[\\/:*?"<>|]/g, '_') // Remove forbidden characters
+                .replace(/\s+/g, '_')
+                .trim();
+            const filename = `${cleanTitle}_${currentTrack.id || Date.now()}.mp3`;
             const fileUri = `${downloadDir}${filename}`;
+
+            console.log(`[Download Start]: ${currentTrack.url} -> ${fileUri}`);
 
             const downloadResumable = FileSystem.createDownloadResumable(
                 currentTrack.url,
                 fileUri,
                 {},
-                (downloadProgress: any) => {
-                    const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+                (progressData: any) => {
+                    const progress = progressData.totalBytesWritten / progressData.totalBytesExpectedToWrite;
                     setDownloadProgress(progress);
                 }
             );
@@ -122,7 +134,8 @@ export default function PlayerScreen() {
             const result = await downloadResumable.downloadAsync();
             setDownloadProgress(null);
 
-            if (result) {
+            if (result && result.uri) {
+                console.log(`[Download Success]: Saved to ${result.uri}`);
                 // Save metadata for library sync
                 try {
                     const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;
@@ -130,11 +143,22 @@ export default function PlayerScreen() {
                     const metadataInfo = await FileSystem.getInfoAsync(metadataFile);
                     if (metadataInfo.exists) {
                         const content = await FileSystem.readAsStringAsync(metadataFile);
-                        if (content) downloads = JSON.parse(content);
+                        if (content) {
+                            try {
+                                downloads = JSON.parse(content);
+                            } catch (parseErr) {
+                                console.error("Metadata parse error, resetting:", parseErr);
+                                downloads = [];
+                            }
+                        }
                     }
 
                     if (!downloads.some((s: any) => s.id === currentTrack.id)) {
-                        downloads.push(currentTrack);
+                        downloads.push({
+                            ...currentTrack,
+                            localUri: result.uri,
+                            downloadedAt: new Date().toISOString()
+                        });
                         await FileSystem.writeAsStringAsync(metadataFile, JSON.stringify(downloads));
                         
                         // Sync the store immediately
@@ -150,17 +174,19 @@ export default function PlayerScreen() {
 
                 Alert.alert(
                     "Download Complete",
-                    `Song has been saved. It's now available offline in your Library.`,
+                    `"${currentTrack.title}" has been saved for offline playback.`,
                     [
-                        { text: "Later", style: "cancel" },
+                        { text: "OK", style: "default" },
                         { text: "Share", onPress: () => Sharing.shareAsync(result.uri) }
                     ]
                 );
+            } else {
+                throw new Error("Download failed: Resulting URI is empty.");
             }
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            console.error("[Download Error]:", e);
             setDownloadProgress(null);
-            Alert.alert("Error", "Failed to download song.");
+            Alert.alert("Download Error", `Failed to download: ${e.message || 'Unknown error'}`);
         }
     };
 

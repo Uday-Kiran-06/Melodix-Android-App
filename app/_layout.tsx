@@ -121,8 +121,6 @@ export default function RootLayout() {
             appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
             alwaysPauseOnInterruption: false,
           },
-          // Additional reliability for background stopping
-          stopWithApp: true,
           capabilities: [
             Capability.Play,
             Capability.Pause,
@@ -236,6 +234,23 @@ function RootLayoutNav({ loaded }: { loaded: boolean }) {
 
   const currentTheme = theme === 'system' ? systemColorScheme : theme;
   const navigationTheme = currentTheme === 'dark' ? DarkTheme : DefaultTheme;
+
+  useEffect(() => {
+    const subscription = require('react-native').AppState.addEventListener('change', (nextAppState: string) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // App is being swiped away or backgrounded
+        // The native stopWithApp should handle this, but explicit reset adds reliability
+        // We only do this if it's explicitly desired - in some apps, background play is default.
+        // User stated: "removing app from background doesn't stop the app running"
+        // So we will stop it.
+        TrackPlayer.reset();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
