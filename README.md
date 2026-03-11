@@ -26,6 +26,16 @@ Melodix is a premium, high-performance music streaming application built with Re
       <td align="center"><b>Settings</b></td>
       <td align="center"><b>Library</b></td>
     </tr>
+    <tr>
+      <td><img src="./assets/previews/app_icon.jpg" width="200" alt="App Icon" /></td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td align="center"><b>App Icon</b></td>
+      <td></td>
+      <td></td>
+    </tr>
   </table>
 </div>
 
