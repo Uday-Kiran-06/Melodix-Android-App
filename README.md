@@ -8,7 +8,7 @@ Melodix is a premium, high-performance music streaming application built with Re
   <table>
     <tr>
       <td><img src="./assets/previews/home.jpg" width="200" alt="Home" /></td>
-      <td><img src="https://via.placeholder.com/300x600?text=Player+Screen" width="200" alt="Player" /></td>
+      <td><img src="./assets/previews/player.jpg" width="200" alt="Player" /></td>
       <td><img src="./assets/previews/search.jpg" width="200" alt="Search" /></td>
     </tr>
     <tr>
@@ -27,13 +27,13 @@ Melodix is a premium, high-performance music streaming application built with Re
       <td align="center"><b>Library</b></td>
     </tr>
     <tr>
+      <td><img src="./assets/previews/podcasts.jpg" width="200" alt="Podcasts" /></td>
       <td><img src="./assets/previews/app_icon.jpg" width="200" alt="App Icon" /></td>
-      <td></td>
       <td></td>
     </tr>
     <tr>
+      <td align="center"><b>Podcasts</b></td>
       <td align="center"><b>App Icon</b></td>
-      <td></td>
       <td></td>
     </tr>
   </table>
