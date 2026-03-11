@@ -3,12 +3,14 @@ import { Tabs } from 'expo-router';
 import { Home, Library, Search, Settings } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={{ flex: 1 }}>
@@ -16,9 +18,10 @@ export default function TabLayout() {
         screenOptions={{
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
           tabBarStyle: {
-            backgroundColor: 'rgba(0,0,0,0.9)',
+            backgroundColor: '#000',
             borderTopWidth: 0,
-            position: 'absolute',
+            height: 50 + insets.bottom,
+            paddingBottom: insets.bottom,
           },
           headerShown: false,
         }}>

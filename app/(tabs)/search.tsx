@@ -1,6 +1,7 @@
 import { useAuth } from '@/components/AuthContext';
 import { MusicImage } from '@/components/MusicImage';
 import { Shimmer } from '@/components/Shimmer';
+import SongMenu from '@/components/SongMenu';
 import { useHistoryStore } from '@/hooks/useHistoryStore';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { useSearch, useSearchAlbums, useSearchPlaylists } from '@/hooks/useMusic';
@@ -9,7 +10,7 @@ import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle2, Play, Plus, Search as SearchIcon, X } from 'lucide-react-native';
+import { CheckCircle2, MoreVertical, Play, Plus, Search as SearchIcon, X } from 'lucide-react-native';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -17,7 +18,7 @@ const AnyFlashList = FlashList as any;
 
 const { width } = Dimensions.get('window');
 
-const SongItem = memo(({ item, onPlay, onToggleLike, isDark, results }: any) => {
+const SongItem = memo(({ item, onPlay, onToggleLike, onMore, isDark, results }: any) => {
   const isLiked = useLibraryStore(state => state.likedSongs.some((s: any) => s.id === item.id));
 
   return (
@@ -33,12 +34,18 @@ const SongItem = memo(({ item, onPlay, onToggleLike, isDark, results }: any) => 
         </View>
         <Play size={20} color="#1DB954" fill="#1DB954" />
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => onToggleLike?.(item)} className="p-2 ml-4">
+      <TouchableOpacity onPress={() => onToggleLike?.(item)} className="p-2 ml-2">
         {isLiked ? (
           <CheckCircle2 size={24} color="#1DB954" />
         ) : (
           <Plus size={24} color={isDark ? "#71717a" : "#94a3b8"} />
         )}
+      </TouchableOpacity>
+      <TouchableOpacity 
+        onPress={onMore} 
+        className={`p-2 rounded-full ${isDark ? 'bg-white/5' : 'bg-black/5'}`}
+      >
+        <MoreVertical size={20} color={isDark ? "#71717a" : "#94a3b8"} />
       </TouchableOpacity>
     </View>
   );
@@ -123,6 +130,7 @@ export default function SearchScreen() {
   const [showAllSongs, setShowAllSongs] = useState(false);
   const [showAllAlbums, setShowAllAlbums] = useState(false);
   const [showAllPlaylists, setShowAllPlaylists] = useState(false);
+  const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
 
   const listData = useMemo(() => {
     if (!query) {
@@ -181,6 +189,7 @@ export default function SearchScreen() {
             item={item}
             onPlay={handleSongPress}
             onToggleLike={handleToggleLike}
+            onMore={() => setSelectedSongForMenu(item)}
             isDark={isDark}
             results={item.type === 'recent-song' ? recentlyPlayedTracks : songs}
           />
@@ -268,6 +277,12 @@ export default function SearchScreen() {
         keyExtractor={(item: any, index: number) => item.id ? `${item.type}-${item.id}` : `type-${item.type}-${index}`}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 150 }}
+      />
+      <SongMenu 
+        isVisible={!!selectedSongForMenu} 
+        onClose={() => setSelectedSongForMenu(null)} 
+        song={selectedSongForMenu}
+        userId={user?.id}
       />
     </View>
   );

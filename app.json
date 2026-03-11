@@ -31,7 +31,8 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "POST_NOTIFICATIONS",
-        "VIBRATE"
+        "VIBRATE",
+        "MODIFY_AUDIO_SETTINGS"
       ],
       "package": "com.anonymous.melodix"
     },
@@ -46,16 +47,34 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.9.25",
             "foregroundServiceType": [
               "mediaPlayback"
             ]
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-sharing",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7d69a9d1-a9c1-48ab-83bd-eade0d730264"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "7d69a9d1-a9c1-48ab-83bd-eade0d730264"
+      }
+    },
+    "owner": "uday_kiran"
   }
 }

@@ -1,0 +1,10 @@
+{
+  "name": "native-audio-effects",
+  "version": "1.0.0",
+  "description": "Native audio effects for Melodix",
+  "main": "index.ts",
+  "types": "index.ts",
+  "dependencies": {
+    "expo-modules-core": "~2.1.0"
+  }
+}

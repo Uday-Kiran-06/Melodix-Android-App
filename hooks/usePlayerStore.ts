@@ -31,6 +31,7 @@ interface PlayerState {
     isInQueue: (trackId: string) => boolean;
     setSleepTimer: (minutes: number | null) => void;
     initPlayer: () => Promise<void>;
+    loadRecommendations: (songId: string) => Promise<void>;
 }
 
 // Map quality selection to JioSaavn API download link keys
@@ -311,6 +312,43 @@ export const usePlayerStore = create<PlayerState>()(
                     // Explicitly pause and ensure isPlaying is false
                     await TrackPlayer.pause();
                     set({ isPlaying: false });
+                }
+            },
+
+            loadRecommendations: async (songId: string) => {
+                const { queue } = get();
+                try {
+                    const recommendations = await jioSaavnService.getRecommendations(songId);
+                    if (recommendations && recommendations.length > 0) {
+                        const existingIds = new Set(queue.map(t => t.id));
+                        const recommendedTracks: Track[] = recommendations
+                            .filter((item: any) => !existingIds.has(item.id))
+                            .map((item: any) => ({
+                                id: String(item.id),
+                                url: item.downloadUrl ? (item.downloadUrl[4]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
+                                title: cleanMetadata(item.name || item.title, "Unknown Track"),
+                                artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
+                                artwork: cleanMetadata(
+                                    typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
+                                    undefined
+                                ),
+                                album: cleanMetadata(item.album?.name || item.album, "Single"),
+                                description: cleanMetadata(item.name || item.title, "Unknown Track"),
+                                genre: cleanMetadata(item.language, "Music"),
+                                ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
+                                isLiveStream: false,
+                            }));
+
+                        if (recommendedTracks.length > 0) {
+                            await TrackPlayer.add(recommendedTracks);
+                            set((state) => ({
+                                queue: [...state.queue, ...recommendedTracks],
+                                originalQueue: [...state.originalQueue, ...recommendedTracks]
+                            }));
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to load recommendations:", e);
                 }
             },
         }),

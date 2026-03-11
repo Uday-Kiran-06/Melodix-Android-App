@@ -1,6 +1,7 @@
 import { useAuth } from '@/components/AuthContext';
 import GlassCard from '@/components/GlassCard';
 import MiniPlayer from '@/components/MiniPlayer';
+import SongMenu from '@/components/SongMenu';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
@@ -8,8 +9,8 @@ import { jioSaavnService } from '@/services/jiosaavn';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Play, X } from 'lucide-react-native';
-import React, { memo, useCallback } from 'react';
+import { ArrowLeft, MoreVertical, Play, X } from 'lucide-react-native';
+import React, { memo, useCallback, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
 const AnyFlashList = FlashList as any;
@@ -43,10 +44,10 @@ const SongRow = memo(({ song, onPlay, onToggleLike, isDark }: any) => (
                 </View>
                 <TouchableOpacity
                     onPress={onToggleLike}
-                    className="p-2 ml-2"
+                    className={`p-2 ml-2 rounded-full ${isDark ? 'bg-white/5' : 'bg-black/5'}`}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <X size={20} color="#ef4444" />
+                    <MoreVertical size={20} color={isDark ? "#71717a" : "#94a3b8"} />
                 </TouchableOpacity>
             </View>
         </GlassCard>
@@ -60,6 +61,7 @@ export default function LikedSongsScreen() {
     const { audioQuality, theme } = useSettingsStore();
     const router = useRouter();
     const isDark = theme === 'dark';
+    const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
 
     const handlePlaySong = useCallback((song: any) => {
         playTrack(song, likedSongs, audioQuality);
@@ -73,10 +75,10 @@ export default function LikedSongsScreen() {
         <SongRow
             song={item}
             onPlay={() => handlePlaySong(item)}
-            onToggleLike={() => handleToggleLike(item)}
+            onToggleLike={() => setSelectedSongForMenu(item)}
             isDark={isDark}
         />
-    ), [handlePlaySong, handleToggleLike, isDark]);
+    ), [handlePlaySong, isDark]);
 
     return (
         <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'} pt-12`}>
@@ -103,6 +105,12 @@ export default function LikedSongsScreen() {
                     />
                 </View>
             )}
+            <SongMenu 
+                isVisible={!!selectedSongForMenu} 
+                onClose={() => setSelectedSongForMenu(null)} 
+                song={selectedSongForMenu}
+                userId={user?.id}
+            />
             <MiniPlayer />
         </View>
     );

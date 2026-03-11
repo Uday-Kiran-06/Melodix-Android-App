@@ -7,6 +7,7 @@ import { MotiView } from 'moti';
 import React, { memo } from 'react';
 import { Dimensions, Text, TouchableOpacity, View } from 'react-native';
 import { useProgress } from 'react-native-track-player';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -48,6 +49,7 @@ export default memo(function MiniPlayer() {
     const { currentTrack, isPlaying, togglePlayback } = usePlayerStore();
     const { position, duration } = useProgress(1000);
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     if (!currentTrack) return null;
 
@@ -55,9 +57,16 @@ export default memo(function MiniPlayer() {
         <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => router.push('/player')}
-            className="absolute bottom-12 left-0 right-0 h-16 shadow-2xl border-t border-white/5"
-            style={{ backgroundColor: '#09090b' }} // Solid Zinc-950 background
+            className="absolute left-0 right-0 h-16 shadow-2xl overflow-hidden"
+            style={{ backgroundColor: '#000', bottom: 50 + insets.bottom }}
         >
+            {/* Dynamic Artwork Background */}
+            <MusicImage
+                images={currentTrack.artwork || currentTrack.image}
+                className="absolute w-full h-full opacity-40"
+                blurRadius={100}
+                transition={500}
+            />
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
                 <MusicImage
                     images={currentTrack.artwork || currentTrack.image}
@@ -80,8 +89,8 @@ export default memo(function MiniPlayer() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Subtle Mini Progress Bar */}
-                <View className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/5">
+                {/* Progressive Progress Bar */}
+                <View className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
                     <View
                         className="h-full bg-emerald-500"
                         style={{ width: `${(position / (duration || 1)) * 100}%` }}

@@ -51,9 +51,20 @@ export const PlaybackService = async function () {
 
     TrackPlayer.addEventListener(Event.PlaybackTrackChanged, async (event) => {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const store = usePlayerStore.getState();
+        
         if (event.nextTrack !== undefined) {
             const track = await TrackPlayer.getTrack(event.nextTrack);
-            usePlayerStore.getState().setCurrentTrack(track);
+            store.setCurrentTrack(track);
+
+            // Load more recommendations if we're nearing the end of the queue
+            const queue = await TrackPlayer.getQueue();
+            if (event.nextTrack >= queue.length - 3) {
+                const currentTrack = queue[event.nextTrack];
+                if (currentTrack?.id) {
+                    store.loadRecommendations(currentTrack.id);
+                }
+            }
         }
     });
 

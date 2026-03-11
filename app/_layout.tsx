@@ -1,7 +1,13 @@
+import { Buffer } from 'buffer';
+if (!global.Buffer) {
+  global.Buffer = Buffer;
+}
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Updates from 'expo-updates';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import '../global.css';
@@ -13,7 +19,7 @@ import { AuthProvider, useAuth } from '@/components/AuthContext';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRouter, useSegments } from 'expo-router';
-import { useColorScheme as useRNColorScheme } from 'react-native';
+import { useColorScheme as useRNColorScheme, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -67,7 +73,6 @@ function InitialLayout({ loaded }: { loaded: boolean }) {
       <Stack.Screen name="liked-songs" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="signup" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }
@@ -77,11 +82,6 @@ export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary
 } from 'expo-router';
-
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -121,6 +121,8 @@ export default function RootLayout() {
             appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
             alwaysPauseOnInterruption: false,
           },
+          // Additional reliability for background stopping
+          stopWithApp: true,
           capabilities: [
             Capability.Play,
             Capability.Pause,
@@ -179,37 +181,71 @@ export default function RootLayout() {
     setup();
   }, []);
 
+  useEffect(() => {
+    async function onFetchUpdateAsync() {
+      try {
+        const update = await Updates.checkForUpdateAsync();
+
+        if (update.isAvailable) {
+          Alert.alert(
+            "Update Available",
+            "A new version of Melodix is available. Would you like to update now?",
+            [
+              { text: "Later", style: "cancel" },
+              { 
+                text: "Update Now", 
+                onPress: async () => {
+                  await Updates.fetchUpdateAsync();
+                  await Updates.reloadAsync();
+                }
+              }
+            ]
+          );
+        }
+      } catch (error) {
+        // Log error or handle gracefully
+        console.log(`Error fetching latest Expo update: ${error}`);
+      }
+    }
+
+    // Only check for updates in production
+    if (!__DEV__) {
+      onFetchUpdateAsync();
+    }
+  }, []);
+
   if (!loaded) {
     return null;
   }
 
-  return <RootLayoutNav loaded={loaded} />;
+  return (
+    <AuthProvider>
+      <RootLayoutNav loaded={loaded} />
+    </AuthProvider>
+  );
 }
 
-// Guard registration to prevent multiple calls warning
-if (!(global as any).isServiceRegistered) {
-  TrackPlayer.registerPlaybackService(() => PlaybackService);
-  (global as any).isServiceRegistered = true;
-}
 
 function RootLayoutNav({ loaded }: { loaded: boolean }) {
   const systemColorScheme = useRNColorScheme();
   const { theme } = useSettingsStore();
+  const { useAudioEffects } = require('@/hooks/useAudioEffects');
+
+  // Initialize audio effects
+  useAudioEffects();
 
   const currentTheme = theme === 'system' ? systemColorScheme : theme;
   const navigationTheme = currentTheme === 'dark' ? DarkTheme : DefaultTheme;
 
   return (
-    <AuthProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <QueryClientProvider client={queryClient}>
-            <ThemeProvider value={navigationTheme}>
-              <InitialLayout loaded={loaded} />
-            </ThemeProvider>
-          </QueryClientProvider>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider value={navigationTheme}>
+            <InitialLayout loaded={loaded} />
+          </ThemeProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

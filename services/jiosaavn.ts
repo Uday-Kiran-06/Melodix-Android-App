@@ -172,16 +172,19 @@ export const jioSaavnService = {
                 ENGLISH_BASE_URL
             ];
 
-            for (const baseUrl of [...new Set(baseUrls)]) {
+            let allResults: any[] = [];
+            const uniqueUrls = [...new Set(baseUrls)];
+
+            // Try at most 2 different providers to balance speed and coverage
+            for (const baseUrl of uniqueUrls.slice(0, 2)) {
                 try {
                     const fullUrl = `${baseUrl}/search/albums?query=${encodeURIComponent(query)}&language=${languages}`;
-                    console.log(`[API Request]: Fetching ${fullUrl}`);
                     const response = await fetch(fullUrl);
                     if (response.ok) {
                         const data = await response.json();
                         const results = data?.data?.results || [];
                         if (results.length > 0) {
-                            return results.map((album: any) => ({
+                            const formatted = results.map((album: any) => ({
                                 ...album,
                                 name: jioSaavnService.decodeHtml(album.name),
                                 image: album.image ? jioSaavnService.sanitizeImageUrl(album.image) : null,
@@ -194,13 +197,14 @@ export const jioSaavnService = {
                                     }))
                                 }
                             }));
+                            allResults = [...allResults, ...formatted];
                         }
                     }
                 } catch (e: any) {
                     console.error(`[API Error Detail] Search failed for ${baseUrl}:`, e.message);
                 }
             }
-            return [];
+            return jioSaavnService.deduplicateItems(allResults);
         } catch (error) {
             return [];
         }
@@ -215,28 +219,41 @@ export const jioSaavnService = {
                 ENGLISH_BASE_URL
             ];
 
-            for (const baseUrl of [...new Set(baseUrls)]) {
+            let allResults: any[] = [];
+            const uniqueUrls = [...new Set(baseUrls)];
+
+            for (const baseUrl of uniqueUrls.slice(0, 2)) {
                 try {
                     const fullUrl = `${baseUrl}/search/playlists?query=${encodeURIComponent(query)}&language=${languages}`;
-                    console.log(`[API Request]: Fetching ${fullUrl}`);
                     const response = await fetch(fullUrl);
                     if (response.ok) {
                         const data = await response.json();
                         const results = data?.data?.results || [];
                         if (results.length > 0) {
-                            return results.map((playlist: any) => ({
+                            const formatted = results.map((playlist: any) => ({
                                 ...playlist,
                                 name: jioSaavnService.decodeHtml(playlist.name),
                                 image: playlist.image ? jioSaavnService.sanitizeImageUrl(playlist.image) : null
                             }));
+                            allResults = [...allResults, ...formatted];
                         }
                     }
                 } catch (e) { }
             }
-            return [];
+            return jioSaavnService.deduplicateItems(allResults);
         } catch (error) {
             return [];
         }
+    },
+
+    deduplicateItems: (items: any[]): any[] => {
+        const seen = new Set();
+        return items.filter(item => {
+            if (!item.id) return true;
+            const duplicate = seen.has(item.id);
+            seen.add(item.id);
+            return !duplicate;
+        });
     },
 
     deduplicateSongs: (songs: Song[]): Song[] => {

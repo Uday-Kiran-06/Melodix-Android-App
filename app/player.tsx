@@ -1,6 +1,7 @@
 import { useAuth } from '@/components/AuthContext';
 import { MusicImage } from '@/components/MusicImage';
 import PlaylistModal from '@/components/PlaylistModal';
+import SongMenu from '@/components/SongMenu';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
@@ -32,7 +33,7 @@ import {
     X
 } from 'lucide-react-native';
 import { MotiView } from 'moti';
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Dimensions, FlatList, Modal, Text, TouchableOpacity, View } from 'react-native';
 import TrackPlayer, { useProgress } from 'react-native-track-player';
 
@@ -98,8 +99,15 @@ export default function PlayerScreen() {
 
         try {
             setDownloadProgress(0);
+            
+            const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
+            const dirInfo = await FileSystem.getInfoAsync(downloadDir);
+            if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
+            }
+
             const filename = `${(currentTrack.title || 'song').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-            const fileUri = `${FileSystem.documentDirectory}${filename}`;
+            const fileUri = `${downloadDir}${filename}`;
 
             const downloadResumable = FileSystem.createDownloadResumable(
                 currentTrack.url,
@@ -118,11 +126,6 @@ export default function PlayerScreen() {
                 // Save metadata for library sync
                 try {
                     const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;
-                    const dirInfo = await FileSystem.getInfoAsync(`${FileSystem.documentDirectory}Melodix`);
-                    if (!dirInfo.exists) {
-                        await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}Melodix`, { intermediates: true });
-                    }
-
                     let downloads = [];
                     const metadataInfo = await FileSystem.getInfoAsync(metadataFile);
                     if (metadataInfo.exists) {
@@ -133,8 +136,9 @@ export default function PlayerScreen() {
                     if (!downloads.some((s: any) => s.id === currentTrack.id)) {
                         downloads.push(currentTrack);
                         await FileSystem.writeAsStringAsync(metadataFile, JSON.stringify(downloads));
+                        
                         // Sync the store immediately
-                        useLibraryStore.getState().setDownloadedSongs(downloads);
+                        useLibraryStore.getState().syncDownloadedSongs();
                     }
                 } catch (metaErr) {
                     console.error("Failed to save download metadata:", metaErr);
@@ -146,7 +150,7 @@ export default function PlayerScreen() {
 
                 Alert.alert(
                     "Download Complete",
-                    `Song has been saved to: ${filename}. It's now available offline in your Library.`,
+                    `Song has been saved. It's now available offline in your Library.`,
                     [
                         { text: "Later", style: "cancel" },
                         { text: "Share", onPress: () => Sharing.shareAsync(result.uri) }
@@ -160,6 +164,8 @@ export default function PlayerScreen() {
         }
     };
 
+    const [isSkipping, setIsSkipping] = useState(false);
+
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
@@ -168,9 +174,39 @@ export default function PlayerScreen() {
 
 
     const handleSkipToTrack = useCallback(async (index: number) => {
-        await TrackPlayer.skip(index);
-        setIsQueueVisible(false);
+        try {
+            await TrackPlayer.skip(index);
+            setIsQueueVisible(false);
+        } catch (e) {
+            console.error("Skip to track failed:", e);
+        }
     }, []);
+
+    const handleSkipNext = useCallback(async () => {
+        if (isSkipping) return;
+        setIsSkipping(true);
+        try {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            await TrackPlayer.skipToNext();
+        } catch (e) {
+            console.error("Skip next failed:", e);
+        } finally {
+            setTimeout(() => setIsSkipping(false), 500);
+        }
+    }, [isSkipping]);
+
+    const handleSkipPrev = useCallback(async () => {
+        if (isSkipping) return;
+        setIsSkipping(true);
+        try {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            await TrackPlayer.skipToPrevious();
+        } catch (e) {
+            console.error("Skip previous failed:", e);
+        } finally {
+            setTimeout(() => setIsSkipping(false), 500);
+        }
+    }, [isSkipping]);
 
     if (!currentTrack) return null;
 
@@ -191,26 +227,24 @@ export default function PlayerScreen() {
                 className="absolute w-full h-full"
             />
 
-            <View className="flex-1 px-8 pt-12 pb-16">
-                <View className="flex-row justify-between items-center mb-10">
+            <View className="flex-1 px-8 justify-center pb-8">
+                <View className="flex-row justify-between items-center mb-12">
                     <TouchableOpacity onPress={() => router.back()}>
-                        <ChevronDown size={28} color="#fff" />
+                        <ChevronDown size={32} color="#fff" />
                     </TouchableOpacity>
-                    <Text className="text-gray-300 font-medium">{currentTrack.title?.toUpperCase()}</Text>
-                    <View className="flex-row items-center">
-                        <TouchableOpacity onPress={() => setIsQueueVisible(true)} className="mr-4">
-                            <ListMusic size={28} color="#fff" />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setIsMenuVisible(true)}>
-                            <MoreVertical size={28} color="#fff" />
-                        </TouchableOpacity>
+                    <View className="items-center">
+                        <Text className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Playing from</Text>
+                        <Text className="text-white font-bold text-xs">MELODIX PLAYER</Text>
                     </View>
+                    <TouchableOpacity onPress={() => setIsMenuVisible(true)}>
+                        <MoreVertical size={28} color="#fff" />
+                    </TouchableOpacity>
                 </View>
 
-                <View className="items-center shadow-2xl">
+                <View className="items-center shadow-2xl my-4">
                     <View
                         style={{ width: width - 64, height: width - 64 }}
-                        className="rounded-2xl overflow-hidden bg-zinc-900"
+                        className="rounded-2xl overflow-hidden bg-zinc-900 shadow-2xl shadow-black/50"
                     >
                         <MusicImage
                             images={getImageUrl(currentTrack)}
@@ -221,7 +255,7 @@ export default function PlayerScreen() {
                     </View>
                 </View>
 
-                <View className="mt-10">
+                <View className="mt-12">
                     <View className="flex-row justify-between items-center">
                         <View className="flex-1 mr-4">
                             <MarqueeText
@@ -231,12 +265,6 @@ export default function PlayerScreen() {
                             <Text className="text-gray-400 text-lg" numberOfLines={1}>{currentTrack.artist}</Text>
                         </View>
                         <View className="flex-row items-center">
-                            <TouchableOpacity
-                                onPress={() => setIsPlaylistModalVisible(true)}
-                                className="mr-6"
-                            >
-                                <Plus size={28} color="#fff" />
-                            </TouchableOpacity>
                             <TouchableOpacity onPress={() => {
                                 toggleLike(currentTrack as any, user?.id);
                             }}>
@@ -253,8 +281,8 @@ export default function PlayerScreen() {
                         minimumValue={0}
                         maximumValue={duration}
                         value={isDragging ? dragPosition : position}
-                        minimumTrackTintColor="#1DB954"
-                        maximumTrackTintColor="rgba(255, 255, 255, 0.1)"
+                        minimumTrackTintColor="#fff"
+                        maximumTrackTintColor="rgba(255, 255, 255, 0.2)"
                         thumbTintColor="#fff"
                         onSlidingStart={() => setIsDragging(true)}
                         onValueChange={(value) => setDragPosition(value)}
@@ -273,12 +301,12 @@ export default function PlayerScreen() {
                     <TouchableOpacity onPress={toggleShuffle}>
                         <Shuffle size={24} color={shuffle ? "#1DB954" : "#fff"} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => TrackPlayer.skipToPrevious()}>
-                        <SkipBack size={32} color="#fff" fill="#fff" />
+                    <TouchableOpacity onPress={handleSkipPrev} disabled={isSkipping}>
+                        <SkipBack size={36} color={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} fill={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={togglePlayback}
-                        className="w-20 h-20 bg-white rounded-full items-center justify-center"
+                        className="w-20 h-20 bg-white rounded-full items-center justify-center scale-110"
                     >
                         {isPlaying ? (
                             <Pause size={40} color="#000" fill="#000" />
@@ -286,8 +314,8 @@ export default function PlayerScreen() {
                             <Play size={40} color="#000" fill="#000" />
                         )}
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => TrackPlayer.skipToNext()}>
-                        <SkipForward size={32} color="#fff" fill="#fff" />
+                    <TouchableOpacity onPress={handleSkipNext} disabled={isSkipping}>
+                        <SkipForward size={36} color={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} fill={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={nextRepeatMode}>
                         {repeatMode === 'track' ? (
@@ -295,6 +323,21 @@ export default function PlayerScreen() {
                         ) : (
                             <Repeat size={24} color={repeatMode === 'queue' ? "#1DB954" : "#fff"} />
                         )}
+                    </TouchableOpacity>
+                </View>
+
+                <View className="flex-row justify-between items-center mt-12 px-2">
+                    <TouchableOpacity onPress={() => setIsQueueVisible(true)}>
+                        <ListMusic size={24} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setIsPlaylistModalVisible(true)}>
+                        <Plus size={24} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleDownload}>
+                         <Download size={24} color={downloadProgress !== null ? "#1DB954" : "#fff"} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setIsSleepTimerModalVisible(true)}>
+                            <Clock size={24} color={sleepTimer ? "#1DB954" : "#fff"} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -305,128 +348,45 @@ export default function PlayerScreen() {
                 song={currentTrack as any}
             />
 
-
-            {/* Song Options Menu */}
-            <Modal
-                visible={isMenuVisible}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setIsMenuVisible(false)}
-            >
-                <TouchableOpacity
-                    activeOpacity={1}
-                    onPress={() => setIsMenuVisible(false)}
-                    className="flex-1 justify-end bg-black/60"
-                >
-                    <View className="bg-zinc-900 p-6 rounded-t-3xl border-t border-zinc-800">
-                        <View className="items-center mb-6">
-                            <View className="w-12 h-1.5 bg-zinc-700 rounded-full mb-6" />
-                            <MusicImage
-                                images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
-                                className="w-24 h-24 rounded-lg mb-4"
-                                transition={300}
-                                contentFit="cover"
-                            />
-                            <Text className="text-white text-xl font-bold text-center" numberOfLines={1}>{currentTrack.title}</Text>
-                            <Text className="text-zinc-500 text-lg text-center" numberOfLines={1}>{currentTrack.artist}</Text>
-                        </View>
-
-
-                        <TouchableOpacity
-                            onPress={() => {
-                                setIsMenuVisible(false);
-                                handleDownload();
-                            }}
-                            className="flex-row items-center py-4 border-b border-zinc-800"
-                            disabled={downloadProgress !== null}
-                        >
-                            {downloadProgress !== null ? (
-                                <View className="flex-row items-center flex-1">
-                                    <View className="w-12 h-1 bg-zinc-800 rounded-full mr-4 overflow-hidden">
-                                        <View className="h-full bg-emerald-500" style={{ width: `${downloadProgress * 100}%` }} />
-                                    </View>
-                                    <Text className="text-emerald-500 text-lg">Downloading... {Math.round(downloadProgress * 100)}%</Text>
-                                </View>
-                            ) : (
-                                <>
-                                    <Download size={24} color="#fff" className="mr-4" />
-                                    <Text className="text-white text-lg">Download song</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
+            <SongMenu
+                isVisible={isMenuVisible}
+                onClose={() => setIsMenuVisible(false)}
+                song={currentTrack as any}
+                userId={user?.id}
+                extraActions={
+                    <>
+                        <SongMenu.Item
+                            icon={Download}
+                            label={downloadProgress !== null ? `Downloading... ${Math.round(downloadProgress * 100)}%` : "Download song"}
+                            onPress={handleDownload}
+                            showProgress={downloadProgress !== null}
+                            progress={downloadProgress || 0}
+                        />
+                        <SongMenu.Item
+                            icon={Clock}
+                            label={sleepTimer ? `Sleep Timer: ${formatTime(remainingTime || 0)}` : "Sleep Timer"}
                             onPress={() => {
                                 setIsMenuVisible(false);
                                 setIsSleepTimerModalVisible(true);
                             }}
-                            className="flex-row items-center py-4 border-b border-zinc-800"
-                        >
-                            <Clock size={24} color={sleepTimer ? "#1DB954" : "#fff"} className="mr-4" />
-                            <Text className={sleepTimer ? "text-emerald-500 text-lg" : "text-white text-lg"}>
-                                {sleepTimer ? `Sleep Timer: ${formatTime(remainingTime || 0)}` : "Sleep Timer"}
-                            </Text>
-                        </TouchableOpacity>
-
-                        {isInQueue(currentTrack.id) ? (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    removeFromQueue(currentTrack.id);
-                                    setIsMenuVisible(false);
-                                    Alert.alert("Queue", "Song removed from queue");
-                                }}
-                                className="flex-row items-center py-4 border-b border-zinc-800"
-                            >
-                                <ListMinus size={24} color="#ef4444" className="mr-4" />
-                                <Text className="text-red-500 text-lg">Remove from Queue</Text>
-                            </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    addToQueue(currentTrack);
-                                    setIsMenuVisible(false);
-                                    Alert.alert("Queue", "Song added to queue");
-                                }}
-                                className="flex-row items-center py-4 border-b border-zinc-800"
-                            >
-                                <ListPlus size={24} color="#fff" className="mr-4" />
-                                <Text className="text-white text-lg">Add to Queue</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
+                            color={sleepTimer ? "#1DB954" : "#fff"}
+                        />
+                        <SongMenu.Item
+                            icon={isInQueue(currentTrack.id) ? ListMinus : ListPlus}
+                            label={isInQueue(currentTrack.id) ? "Remove from Queue" : "Add to Queue"}
                             onPress={() => {
+                                if (isInQueue(currentTrack.id)) {
+                                    removeFromQueue(currentTrack.id);
+                                } else {
+                                    addToQueue(currentTrack);
+                                }
                                 setIsMenuVisible(false);
-                                setIsPlaylistModalVisible(true);
                             }}
-                            className="flex-row items-center py-4 border-b border-zinc-800"
-                        >
-                            <Plus size={24} color="#fff" className="mr-4" />
-                            <Text className="text-white text-lg">Add or Remove from playlist</Text>
-                        </TouchableOpacity>
-
-                        {isLiked(currentTrack.id) && (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    toggleLike(currentTrack as any, user?.id);
-                                    setIsMenuVisible(false);
-                                }}
-                                className="flex-row items-center py-4"
-                            >
-                                <MinusCircle size={24} color="#ef4444" className="mr-4" />
-                                <Text className="text-red-500 text-lg">Remove From liked songs</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                            onPress={() => setIsMenuVisible(false)}
-                            className="mt-4 py-4 rounded-xl bg-zinc-800 items-center"
-                        >
-                            <Text className="text-white font-bold text-lg">Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+                            color={isInQueue(currentTrack.id) ? "#ef4444" : "#fff"}
+                        />
+                    </>
+                }
+            />
 
             {/* Sleep Timer Modal */}
             <Modal

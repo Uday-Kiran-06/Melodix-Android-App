@@ -1,6 +1,7 @@
 import { useAuth } from '@/components/AuthContext';
 import GlassCard from '@/components/GlassCard';
 import { MusicImage } from '@/components/MusicImage';
+import SongMenu from '@/components/SongMenu';
 import { useHistoryStore } from '@/hooks/useHistoryStore';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import {
@@ -92,7 +93,7 @@ const SongCard = memo(({ item, onPress, isDark, type = 'square' }: { item: any; 
   );
 });
 
-const SongListItem = memo(({ item, onPress, isDark }: { item: any; onPress: () => void; isDark: boolean }) => {
+const SongListItem = memo(({ item, onPress, onMore, isDark }: { item: any; onPress: () => void; onMore: () => void; isDark: boolean }) => {
   const imageUrl = getImageUrl(item);
 
   return (
@@ -116,8 +117,11 @@ const SongListItem = memo(({ item, onPress, isDark }: { item: any; onPress: () =
           {item?.artists?.primary?.[0]?.name || item?.artist || "Unknown Artist"}
         </Text>
       </View>
-      <TouchableOpacity className="p-2">
-        <MoreVertical size={20} color={isDark ? '#71717a' : '#64748b'} />
+      <TouchableOpacity 
+        onPress={onMore} 
+        className={`p-2 rounded-full ${isDark ? 'bg-white/5' : 'bg-black/5'}`}
+      >
+        <MoreVertical size={20} color={isDark ? "#71717a" : "#94a3b8"} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -130,6 +134,7 @@ export default function HomeScreen() {
   const { theme } = useSettingsStore();
   const { recentlyPlayedItems = [], recentKeywords: searchHistory = [] } = useHistoryStore();
   const [activeFilter, setActiveFilter] = useState('All');
+  const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
   const isDark = theme === 'dark';
 
   const handleSongPress = useCallback((id: string) => {
@@ -393,7 +398,14 @@ export default function HomeScreen() {
         <FlatList
           data={data}
           keyExtractor={(item, index) => item.id + index}
-          renderItem={({ item }) => <SongListItem item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />}
+          renderItem={({ item }) => (
+            <SongListItem 
+               item={item} 
+               onPress={() => handleSongPress(item.id)} 
+               onMore={() => setSelectedSongForMenu(item)}
+               isDark={isDark} 
+            />
+          )}
           ListHeaderComponent={() => (
             <>
               {renderHeader()}
@@ -417,7 +429,14 @@ export default function HomeScreen() {
         <FlatList
           data={data}
           keyExtractor={(item, index) => item.id + index}
-          renderItem={({ item }) => <SongListItem item={item} onPress={() => handleSongPress(item.id)} isDark={isDark} />}
+          renderItem={({ item }) => (
+            <SongListItem 
+               item={item} 
+               onPress={() => handleSongPress(item.id)} 
+               onMore={() => setSelectedSongForMenu(item)}
+               isDark={isDark} 
+            />
+          )}
           ListHeaderComponent={() => (
             <>
               {renderHeader()}
@@ -447,6 +466,12 @@ export default function HomeScreen() {
         maxToRenderPerBatch={4}
         windowSize={5}
         removeClippedSubviews={true}
+      />
+      <SongMenu 
+        isVisible={!!selectedSongForMenu} 
+        onClose={() => setSelectedSongForMenu(null)} 
+        song={selectedSongForMenu}
+        userId={user?.id}
       />
     </View>
   );

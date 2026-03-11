@@ -40,11 +40,36 @@ yarn-error.*
 /ios
 /android
 
+# build files
+build/
+bin/
+obj/
+modules/**/android/build/
+modules/**/android/.cxx/
+modules/**/android/.gradle/
+
 # IDEs
 .idea/
+.vscode/
+*.swp
+*.swo
 
 # Environment
 .env
 .env.development
 env.development
+.env.local
+.env.production
+.env.test
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
 

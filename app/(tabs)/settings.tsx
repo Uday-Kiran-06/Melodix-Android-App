@@ -3,9 +3,10 @@ import GlassCard from '@/components/GlassCard';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Info, LogOut, Moon, Shield, Sun, User } from 'lucide-react-native';
+import { Activity, ArrowDownCircle, ChevronRight, Info, LogOut, Moon, Shield, Sun, User, Volume2 } from 'lucide-react-native';
 import React from 'react';
-import { ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Switch, Text, TouchableOpacity, View, Alert } from 'react-native';
+import * as Updates from 'expo-updates';
 
 export default function SettingsScreen() {
     const { user, signOut } = useAuth();
@@ -23,6 +24,35 @@ export default function SettingsScreen() {
         { label: 'High (160kbps)', value: '160kbps' },
         { label: 'Extreme (320kbps)', value: '320kbps' },
     ];
+
+    const handleCheckForUpdates = async () => {
+        if (__DEV__) {
+            Alert.alert("Development Mode", "Updates are not available in development mode.");
+            return;
+        }
+        
+        try {
+            const update = await Updates.checkForUpdateAsync();
+            if (update.isAvailable) {
+                Alert.alert(
+                    "Update Available",
+                    "A new version of Melodix is available. Would you like to update now?",
+                    [
+                        { text: "Later", style: "cancel" },
+                        { text: "Update Now", onPress: async () => {
+                            await Updates.fetchUpdateAsync();
+                            await Updates.reloadAsync();
+                        }}
+                    ]
+                );
+            } else {
+                Alert.alert("Up to Date", "You are already on the latest version of Melodix.");
+            }
+        } catch (error) {
+            console.error("Update check failed:", error);
+            Alert.alert("Update Error", "Failed to check for updates. Make sure you are connected to the internet.");
+        }
+    };
 
     const isDark = theme === 'dark';
     const [isQualityExpanded, setIsQualityExpanded] = React.useState(false);
@@ -91,15 +121,29 @@ export default function SettingsScreen() {
                 </GlassCard>
 
                 {/* Audio Quality Section */}
-                <Text className="text-gray-400 font-bold mb-4 uppercase text-xs tracking-widest">Audio Quality</Text>
+                <Text className="text-gray-400 font-bold mb-4 uppercase text-xs tracking-widest">Audio & Effects</Text>
                 <GlassCard intensity={20} tint={isDark ? 'dark' : 'light'} style={{ marginBottom: 24 }}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/audio-settings' as any)}
+                        className={`flex-row justify-between items-center p-4 border-b ${isDark ? 'border-zinc-800' : 'border-slate-200'}`}
+                    >
+                        <View className="flex-row items-center">
+                            <Activity size={20} color="#10b981" className="mr-3" />
+                            <Text className={`text-lg ${isDark ? 'text-white' : 'text-slate-800'}`}>Equalizer & Bass Boost</Text>
+                        </View>
+                        <ChevronRight size={20} color="#71717a" />
+                    </TouchableOpacity>
+
                     <TouchableOpacity
                         onPress={() => setIsQualityExpanded(!isQualityExpanded)}
                         className={`flex-row justify-between items-center p-4 ${isQualityExpanded ? (isDark ? 'border-b border-zinc-800' : 'border-b border-slate-200') : ''}`}
                     >
-                        <Text className={`text-lg ${isDark ? 'text-white' : 'text-slate-800 font-bold'}`}>
-                            {qualities.find(q => q.value === audioQuality)?.label}
-                        </Text>
+                        <View className="flex-row items-center">
+                            <Volume2 size={20} color="#10b981" className="mr-3" />
+                            <Text className={`text-lg ${isDark ? 'text-white' : 'text-slate-800 font-bold'}`}>
+                                Quality: {qualities.find(q => q.value === audioQuality)?.label.split(' ')[0]}
+                            </Text>
+                        </View>
                         <ChevronRight size={20} color="#71717a" style={{ transform: [{ rotate: isQualityExpanded ? '90deg' : '0deg' }] }} />
                     </TouchableOpacity>
 
@@ -140,6 +184,13 @@ export default function SettingsScreen() {
                                 <Text className="text-zinc-500 font-bold">1.0.5 (Melux-Edit)</Text>
                             </View>
                         </View>
+                        <TouchableOpacity onPress={handleCheckForUpdates} className={`p-4 border-t ${isDark ? 'border-zinc-800/50' : 'border-slate-200'} flex-row justify-between items-center`}>
+                            <View className="flex-row items-center">
+                                <ArrowDownCircle size={16} color={isDark ? "#10b981" : "#059669"} className="mr-2" />
+                                <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-medium`}>Check for Updates</Text>
+                            </View>
+                            <ChevronRight size={16} color="#71717a" />
+                        </TouchableOpacity>
                     </GlassCard>
                 </View>
 

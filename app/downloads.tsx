@@ -2,15 +2,18 @@ import GlassCard from '@/components/GlassCard';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
+import SongMenu from '@/components/SongMenu';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { Song } from '@/types/music';
 import { FlashList } from '@shopify/flash-list';
 import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
-import { ChevronLeft, Download, Play, X } from 'lucide-react-native';
-import React, { memo, useCallback, useEffect } from 'react';
+import { ChevronLeft, Download, MoreVertical, Play, Trash2, X } from 'lucide-react-native';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
+
+const AnyFlashList = FlashList as any;
 
 const DownloadItem = memo(({ item, onPlay, onDelete, isDark }: any) => (
     <View className="mb-4">
@@ -32,18 +35,18 @@ const DownloadItem = memo(({ item, onPlay, onDelete, isDark }: any) => (
                         {item.artists?.primary?.[0]?.name || item.artist}
                     </Text>
                 </View>
-                <View className="flex-row">
+                <View className="flex-row items-center">
                     <TouchableOpacity
                         onPress={onPlay}
-                        className="bg-emerald-500/20 p-3 rounded-full mr-2"
+                        className="bg-emerald-500/10 p-2.5 rounded-full mr-1"
                     >
-                        <Play size={20} color="#1DB954" fill="#1DB954" />
+                        <Play size={18} color="#1DB954" fill="#1DB954" />
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={onDelete}
-                        className="bg-red-500/10 p-3 rounded-full"
+                        className={`p-2.5 rounded-full ${isDark ? 'bg-white/5' : 'bg-black/5'}`}
                     >
-                        <X size={20} color="#ef4444" />
+                        <MoreVertical size={20} color={isDark ? "#71717a" : "#94a3b8"} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -57,6 +60,7 @@ export default function DownloadsScreen() {
     const { audioQuality, theme } = useSettingsStore();
     const isDark = theme === 'dark';
     const router = useRouter();
+    const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
 
     useEffect(() => {
         syncDownloadedSongs();
@@ -74,10 +78,10 @@ export default function DownloadsScreen() {
                     onPress: async () => {
                         try {
                             const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-                            const fileUri = `${FileSystem.documentDirectory}Melodix/Downloads/${filename}`;
+                            const fileUri = `${(FileSystem as any).documentDirectory}Melodix/Downloads/${filename}`;
                             await FileSystem.deleteAsync(fileUri, { idempotent: true });
 
-                            const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;
+                            const metadataFile = `${(FileSystem as any).documentDirectory}Melodix/downloads_metadata.json`;
                             const updatedMetadata = downloadedSongs.filter(s => s.id !== song.id);
                             await FileSystem.writeAsStringAsync(metadataFile, JSON.stringify(updatedMetadata));
 
@@ -93,7 +97,7 @@ export default function DownloadsScreen() {
 
     const handlePlayDownloaded = useCallback(async (song: Song) => {
         const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-        const fileUri = `${FileSystem.documentDirectory}Melodix/Downloads/${filename}`;
+        const fileUri = `${(FileSystem as any).documentDirectory}Melodix/Downloads/${filename}`;
 
         const localSong = {
             ...song,
@@ -102,7 +106,7 @@ export default function DownloadsScreen() {
 
         playTrack(localSong, downloadedSongs.map(s => ({
             ...s,
-            downloadUrl: [{ quality: '320kbps', url: `${FileSystem.documentDirectory}Melodix/Downloads/${s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3` }]
+            downloadUrl: [{ quality: '320kbps', url: `${(FileSystem as any).documentDirectory}Melodix/Downloads/${s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3` }]
         })), audioQuality);
     }, [playTrack, downloadedSongs, audioQuality]);
 
@@ -110,10 +114,10 @@ export default function DownloadsScreen() {
         <DownloadItem
             item={item}
             onPlay={() => handlePlayDownloaded(item)}
-            onDelete={() => handleDelete(item)}
+            onDelete={() => setSelectedSongForMenu(item)}
             isDark={isDark}
         />
-    ), [handlePlayDownloaded, handleDelete, isDark]);
+    ), [handlePlayDownloaded, isDark]);
 
     return (
         <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
@@ -139,16 +143,34 @@ export default function DownloadsScreen() {
                         <Text className="text-zinc-500 mt-4 text-center">No downloaded songs yet.{"\n"}Download some to listen offline!</Text>
                     </View>
                 ) : (
-                    <FlashList
+                    <AnyFlashList
                         data={downloadedSongs}
                         renderItem={renderItem}
                         estimatedItemSize={88}
-                        keyExtractor={(item) => item.id}
+                        keyExtractor={(item: any) => item.id}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 150 }}
                     />
                 )}
             </View>
+
+            <SongMenu 
+                isVisible={!!selectedSongForMenu} 
+                onClose={() => setSelectedSongForMenu(null)} 
+                song={selectedSongForMenu}
+                extraActions={
+                    <SongMenu.Item 
+                        icon={Trash2}
+                        label="Delete from Device"
+                        onPress={() => {
+                            const song = selectedSongForMenu;
+                            setSelectedSongForMenu(null);
+                            handleDelete(song);
+                        }}
+                        color="#ef4444"
+                    />
+                }
+            />
         </View>
     );
 }
