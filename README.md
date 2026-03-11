@@ -1,4 +1,4 @@
-![WhatsApp Image 2026-03-11 at 10 36 51 PM](https://github.com/user-attachments/assets/c88a96eb-4168-493e-bc63-14b0b18d7a50)# Melodix
+# Melodix
 
 Melodix is a premium, high-performance music streaming application built with React Native and Expo. It features a stunning glassmorphism-inspired UI and a custom native audio engine for unparalleled sound control.
 
