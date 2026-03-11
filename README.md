@@ -1,4 +1,4 @@
-# Melodix
+![WhatsApp Image 2026-03-11 at 10 36 51 PM](https://github.com/user-attachments/assets/c88a96eb-4168-493e-bc63-14b0b18d7a50)# Melodix
 
 Melodix is a premium, high-performance music streaming application built with React Native and Expo. It features a stunning glassmorphism-inspired UI and a custom native audio engine for unparalleled sound control.
 
@@ -7,9 +7,9 @@ Melodix is a premium, high-performance music streaming application built with Re
 <div align="center">
   <table>
     <tr>
-      <td><img src="https://via.placeholder.com/300x600?text=Home+Screen" width="200" alt="Home" /></td>
-      <td><img src="https://via.placeholder.com/300x600?text=Player+Screen" width="200" alt="Player" /></td>
-      <td><img src="https://via.placeholder.com/300x600?text=Search+Screen" width="200" alt="Search" /></td>
+      <td><img src=![Uploading WhatsApp Image 2026-03-11 at 10.38.08 PM.jpeg…]() /></td>
+      <td><img src=![WhatsApp Image 2026-03-11 at 10 37 03 PM](https://github.com/user-attachments/assets/4adaadfd-a90b-48b9-a7cf-e64f7b6363eb) /></td>
+      <td><img src=![Uploading WhatsApp Image 2026-03-11 at 10.37.02 PM.jpeg…]() /></td>
     </tr>
     <tr>
       <td align="center"><b>Home</b></td>
@@ -17,9 +17,9 @@ Melodix is a premium, high-performance music streaming application built with Re
       <td align="center"><b>Search</b></td>
     </tr>
     <tr>
-      <td><img src="https://via.placeholder.com/300x600?text=Audio+Effects" width="200" alt="Audio Effects" /></td>
-      <td><img src="https://via.placeholder.com/300x600?text=Liked+Songs" width="200" alt="Liked Songs" /></td>
-      <td><img src="https://via.placeholder.com/300x600?text=Downloads" width="200" alt="Downloads" /></td>
+      <td><img src=![WhatsApp Image 2026-03-11 at 10 36 53 PM](https://github.com/user-attachments/assets/3d7cc7a5-e3d2-4799-9532-5e05db890e0a) /></td>
+      <td><img src=![WhatsApp Image 2026-03-11 at 10 36 51 PM](https://github.com/user-attachments/assets/4dafcb35-ee6e-49a7-b594-beffb0f2ea66) /></td>
+      <td><img src=![WhatsApp Image 2026-03-11 at 10 36 52 PM](https://github.com/user-attachments/assets/bda5c38e-a4ff-4650-bce9-d7e9caaf9a8b) /></td>
     </tr>
     <tr>
       <td align="center"><b>Audio Effects</b></td>
@@ -27,8 +27,6 @@ Melodix is a premium, high-performance music streaming application built with Re
       <td align="center"><b>Downloads</b></td>
     </tr>
     <tr>
-      <td><img src="https://via.placeholder.com/300x600?text=Settings" width="200" alt="Settings" /></td>
-      <td></td>
       <td></td>
     </tr>
     <tr>
