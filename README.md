@@ -74,7 +74,7 @@ Melodix is a premium, high-performance **free music streaming** application buil
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/melodix.git
+   git clone https://github.com/uday-kiran-06/Melodix-Android-App.git
    ```
 
 2. Install dependencies:
