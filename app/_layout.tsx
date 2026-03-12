@@ -8,7 +8,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import 'react-native-reanimated';
 import '../global.css';
 
@@ -93,7 +93,7 @@ let isPlayerInitialized = false;
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    // Add custom fonts here if needed
   });
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
@@ -154,16 +154,20 @@ export default function RootLayout() {
 
         // Restore previous session if available
         try {
-          const { usePlayerStore } = require('@/hooks/usePlayerStore');
-          await usePlayerStore.getState().initPlayer();
+          const store = require('@/hooks/usePlayerStore');
+          if (store && store.usePlayerStore) {
+            await store.usePlayerStore.getState().initPlayer();
+          }
         } catch (initErr) {
           console.warn('Player init restoration error:', initErr);
         }
 
         // Sync downloads
         try {
-          const { useLibraryStore } = require('@/hooks/useLibraryStore');
-          useLibraryStore.getState().syncDownloadedSongs();
+          const store = require('@/hooks/useLibraryStore');
+          if (store && store.useLibraryStore) {
+            store.useLibraryStore.getState().syncDownloadedSongs();
+          }
         } catch (storeErr) {
           console.warn('Store sync error during setup:', storeErr);
         }
@@ -248,20 +252,20 @@ function RootLayoutNav({ loaded }: { loaded: boolean }) {
   const navigationTheme = currentTheme === 'dark' ? DarkTheme : DefaultTheme;
 
   useEffect(() => {
-    const subscription = require('react-native').AppState.addEventListener('change', (nextAppState: string) => {
-      if (nextAppState === 'background') {
-        // App is being swiped away or backgrounded
-        // The native stopWithApp should handle this, but explicit reset adds reliability
-        // We only do this if it's explicitly desired - in some apps, background play is default.
-        // User stated: "removing app from background doesn't stop the app running"
-        // So we will stop it.
-        TrackPlayer.reset();
+    // Initialize Download Notification Channel for Android
+    const setupNotifications = async () => {
+      if (require('react-native').Platform.OS === 'android') {
+        const Notifications = require('expo-notifications');
+        await Notifications.setNotificationChannelAsync('download', {
+          name: 'Download Updates',
+          importance: Notifications.AndroidImportance.LOW,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#1DB954',
+          showBadge: false,
+        });
       }
-    });
-
-    return () => {
-      subscription.remove();
     };
+    setupNotifications();
   }, []);
 
   return (

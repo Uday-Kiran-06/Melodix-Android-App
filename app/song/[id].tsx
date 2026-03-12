@@ -5,11 +5,12 @@ import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { Song } from '@/types/music';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
+import * as Notifications from 'expo-notifications';
 import {
     ChevronLeft,
     Download,
@@ -65,52 +66,68 @@ export default function SongDetailsScreen() {
             const qualityIdx = (audioQuality === '320kbps' || audioQuality === '160kbps') ? (song.downloadUrl.length > 4 ? 4 : song.downloadUrl.length - 1) : 0;
             const url = song.downloadUrl[qualityIdx].url;
 
-            const downloadDir = `${(FileSystem as any).documentDirectory}Melodix/Downloads/`;
+            const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
             const dirInfo = await FileSystem.getInfoAsync(downloadDir);
             if (!dirInfo.exists) {
                 await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
             }
 
-            const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-            const fileUri = `${(FileSystem as any).documentDirectory}Melodix/Downloads/${filename}`;
+            const cleanTitle = song.name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_').trim();
+            const filename = `${cleanTitle}_${song.id}.mp3`;
+            const fileUri = `${downloadDir}${filename}`;
+
+            const notificationId = `download-${song.id}`;
+            let lastUpdate = Date.now();
 
             const downloadResumable = FileSystem.createDownloadResumable(
                 url,
                 fileUri,
                 {},
-                (progressData: any) => {
+                async (progressData: any) => {
                     const progress = progressData.totalBytesWritten / progressData.totalBytesExpectedToWrite;
                     setDownloadProgress(progress);
+
+                    const now = Date.now();
+                    if (now - lastUpdate > 1000 || progress === 1) {
+                        lastUpdate = now;
+                        try {
+                            await Notifications.scheduleNotificationAsync({
+                                identifier: notificationId,
+                                content: {
+                                    title: `Downloading: ${song.name}`,
+                                    body: `Progress: ${Math.round(progress * 100)}%`,
+                                },
+                                trigger: null,
+                            });
+                        } catch (e) {}
+                    }
                 }
             );
 
             const result = await downloadResumable.downloadAsync();
             setDownloadProgress(null);
+            try { await Notifications.dismissNotificationAsync(notificationId); } catch(e) {}
 
-            if (result) {
-                // Update Metadata
-                const metadataFile = `${(FileSystem as any).documentDirectory}Melodix/downloads_metadata.json`;
-                let metadata: Song[] = [];
-                const metadataInfo = await FileSystem.getInfoAsync(metadataFile);
-                if (metadataInfo.exists) {
-                    const content = await FileSystem.readAsStringAsync(metadataFile);
-                    metadata = JSON.parse(content);
-                }
+            if (result && result.uri) {
+                // Save to SQLite & Media Library
+                await useLibraryStore.getState().saveDownload(song, result.uri);
 
-                // Add if not already present
-                if (!metadata.some(s => s.id === song.id)) {
-                    metadata.push(song);
-                    await FileSystem.writeAsStringAsync(metadataFile, JSON.stringify(metadata));
-                }
-
-                // Sync store
-                useLibraryStore.getState().syncDownloadedSongs();
+                try {
+                    await Notifications.scheduleNotificationAsync({
+                        identifier: `${notificationId}-complete`,
+                        content: {
+                            title: "Download Complete",
+                            body: `"${song.name}" has been saved for offline playback.`
+                        },
+                        trigger: null
+                    });
+                } catch (e) {}
 
                 Alert.alert(
                     "Download Complete",
-                    `Song has been saved to: Melodix/Downloads/${filename}. Would you like to share it?`,
+                    `"${song.name}" has been saved for offline playback.`,
                     [
-                        { text: "No", style: "cancel" },
+                        { text: "OK" },
                         { text: "Share", onPress: () => Sharing.shareAsync(result.uri) }
                     ]
                 );
@@ -176,6 +193,14 @@ export default function SongDetailsScreen() {
                                     contentFit="cover"
                                     placeholder={require('../../assets/images/favicon.png')}
                                 />
+                                {downloadProgress !== null && (
+                                    <View className="absolute bottom-0 left-0 right-0 h-2 bg-black/40 rounded-b-3xl overflow-hidden">
+                                        <View 
+                                            className="h-full bg-emerald-500" 
+                                            style={{ width: `${downloadProgress * 100}%` }} 
+                                        />
+                                    </View>
+                                )}
                             </View>
 
                             <View className="mt-10 items-center px-4 w-full">

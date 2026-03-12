@@ -1,8 +1,39 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
+import * as MediaLibrary from 'expo-media-library';
+import * as SQLite from 'expo-sqlite';
 import { create } from "zustand";
 import { jioSaavnService } from "../services/jiosaavn";
 import { supabase } from "../services/supabase";
 import { Song } from "../types/music";
+
+// Lazy Database Initialization Helper
+let _db: any = null;
+const getDb = () => {
+    if (_db) return _db;
+    try {
+        _db = SQLite.openDatabaseSync('melodix.db');
+        _db.execSync(`
+            CREATE TABLE IF NOT EXISTS downloads (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                title TEXT,
+                artist TEXT,
+                image TEXT,
+                downloadUrl TEXT,
+                localUri TEXT,
+                album TEXT,
+                duration INTEGER,
+                year TEXT,
+                is_media_library_synced INTEGER DEFAULT 0
+            );
+        `);
+        return _db;
+    } catch (e) {
+        console.error("[SQLite Error]: Failed to initialize database", e);
+        return null;
+    }
+};
 
 interface LibState {
     likedSongs: Song[];
@@ -16,50 +47,114 @@ interface LibState {
     isSongInPlaylist: (songId: string, playlistId: string) => boolean;
     deletePlaylist: (playlistId: string) => Promise<void>;
     downloadedSongs: Song[];
+    activeDownloads: Record<string, number>;
     setDownloadedSongs: (songs: Song[]) => void;
     syncDownloadedSongs: () => Promise<void>;
+    saveDownload: (song: Song, localUri: string) => Promise<void>;
+    deleteDownload: (songId: string) => Promise<void>;
+    updateDownloadProgress: (songId: string, progress: number) => void;
 }
 
 export const useLibraryStore = create<LibState>((set, get) => ({
     likedSongs: [],
     playlists: [],
     downloadedSongs: [],
+    activeDownloads: {},
 
     setDownloadedSongs: (songs) => set({ downloadedSongs: songs }),
 
-    syncDownloadedSongs: async () => {
+    updateDownloadProgress: (songId, progress) => {
+        set(state => ({
+            activeDownloads: {
+                ...state.activeDownloads,
+                [songId]: progress
+            }
+        }));
+        if (progress === 1) {
+            setTimeout(() => {
+                set(state => {
+                    const newDownloads = { ...state.activeDownloads };
+                    delete newDownloads[songId];
+                    return { activeDownloads: newDownloads };
+                });
+            }, 2000);
+        }
+    },
+
+    saveDownload: async (song, localUri) => {
+        const db = getDb();
+        if (!db) {
+            console.warn("[SQLite Store]: Cannot save download, database not available");
+            return;
+        }
+
         try {
-            const FileSystem = require('expo-file-system/legacy');
-            if (!FileSystem || !FileSystem.documentDirectory) return;
-
-            const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
-            const dirInfo = await FileSystem.getInfoAsync(downloadDir);
-            if (!dirInfo.exists) {
-                await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
-                return;
+            // 1. Save to Media Library
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status !== 'granted') {
+                console.warn("[Media Library]: Permission not granted");
+                // We still proceed with SQLite saving as the file exists in documentDirectory
+            } else {
+                const asset = await MediaLibrary.createAssetAsync(localUri);
+                const albumName = 'Melodix';
+                const album = await MediaLibrary.getAlbumAsync(albumName);
+                if (album === null) {
+                    await MediaLibrary.createAlbumAsync(albumName, asset, false);
+                } else {
+                    await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+                }
             }
 
-            const files = await FileSystem.readDirectoryAsync(downloadDir);
-            const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;
-            const metadataInfo = await FileSystem.getInfoAsync(metadataFile);
+            // 2. Save to SQLite
+            db.runSync(
+                `INSERT OR REPLACE INTO downloads (id, name, localUri, downloadUrl) 
+                 VALUES (?, ?, ?, ?)`,
+                [
+                    song.id, 
+                    song.name,
+                    localUri,
+                    JSON.stringify(song)
+                ]
+            );
+            await get().syncDownloadedSongs();
+        } catch (error) {
+            console.error("Save download error:", error);
+        }
+    },
 
-            if (metadataInfo.exists) {
-                const content = await FileSystem.readAsStringAsync(metadataFile);
-                if (!content) return;
-                const metadata = JSON.parse(content);
-                // Filter metadata to only include files that actually exist
-                const validDownloads = Array.isArray(metadata) ? metadata.filter((s: any) => {
-                    let filename = "";
-                    if (s.localUri) {
-                        filename = s.localUri.split('/').pop() || "";
-                    } else {
-                        // Fallback for older downloads
-                        filename = `${(s.name || s.title || '').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-                    }
-                    return files.includes(filename);
-                }) : [];
-                set({ downloadedSongs: validDownloads });
+    deleteDownload: async (songId) => {
+        const db = getDb();
+        if (!db) return;
+
+        try {
+            const song = db.getFirstSync('SELECT localUri FROM downloads WHERE id = ?', [songId]) as any;
+            if (song && song.localUri) {
+                await FileSystem.deleteAsync(song.localUri, { idempotent: true });
             }
+            db.runSync('DELETE FROM downloads WHERE id = ?', [songId]);
+            await get().syncDownloadedSongs();
+        } catch (error) {
+            console.error("Delete download error:", error);
+        }
+    },
+
+    syncDownloadedSongs: async () => {
+        const db = getDb();
+        if (!db) {
+            console.warn("[SQLite Store]: Skip sync, database not available");
+            return;
+        }
+
+        try {
+            const rows = db.getAllSync('SELECT downloadUrl, localUri FROM downloads') as any[];
+            const songs: Song[] = rows.map(r => {
+                const song = JSON.parse(r.downloadUrl);
+                return {
+                    ...song,
+                    localUri: r.localUri
+                };
+            });
+            set({ downloadedSongs: songs });
         } catch (error) {
             console.error("Sync downloads error:", error);
         }

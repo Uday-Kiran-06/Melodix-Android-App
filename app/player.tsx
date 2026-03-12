@@ -109,11 +109,6 @@ export default function PlayerScreen() {
         if (!currentTrack || !currentTrack.url) return;
 
         try {
-            if (!currentTrack.url) {
-                Alert.alert("Error", "Song URL is missing. Cannot download.");
-                return;
-            }
-
             setDownloadProgress(0);
             
             const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
@@ -122,17 +117,14 @@ export default function PlayerScreen() {
                 await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
             }
 
-            // More aggressive filename sanitization
             const cleanTitle = (currentTrack.title || 'song')
-                .replace(/[\\/:*?"<>|]/g, '_') // Remove forbidden characters
+                .replace(/[\\/:*?"<>|]/g, '_')
                 .replace(/\s+/g, '_')
                 .trim();
-            const filename = `${cleanTitle}_${currentTrack.id || Date.now()}.mp3`;
+            const filename = `${cleanTitle}_${currentTrack.id}.mp3`;
             const fileUri = `${downloadDir}${filename}`;
 
-            console.log(`[Download Start]: ${currentTrack.url} -> ${fileUri}`);
-
-            const notificationId = `download-${currentTrack.id || Date.now()}`;
+            const notificationId = `download-${currentTrack.id}`;
             let lastUpdate = Date.now();
 
             const downloadResumable = FileSystem.createDownloadResumable(
@@ -162,12 +154,12 @@ export default function PlayerScreen() {
 
             const result = await downloadResumable.downloadAsync();
             setDownloadProgress(null);
-
             try { await Notifications.dismissNotificationAsync(notificationId); } catch(e) {}
 
             if (result && result.uri) {
-                console.log(`[Download Success]: Saved to ${result.uri}`);
-                
+                // Save to SQLite & Media Library
+                await useLibraryStore.getState().saveDownload(currentTrack as any, result.uri);
+
                 try {
                     await Notifications.scheduleNotificationAsync({
                         identifier: `${notificationId}-complete`,
@@ -178,57 +170,24 @@ export default function PlayerScreen() {
                         trigger: null
                     });
                 } catch (e) {}
-                // Save metadata for library sync
-                try {
-                    const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;
-                    let downloads = [];
-                    const metadataInfo = await FileSystem.getInfoAsync(metadataFile);
-                    if (metadataInfo.exists) {
-                        const content = await FileSystem.readAsStringAsync(metadataFile);
-                        if (content) {
-                            try {
-                                downloads = JSON.parse(content);
-                            } catch (parseErr) {
-                                console.error("Metadata parse error, resetting:", parseErr);
-                                downloads = [];
-                            }
-                        }
-                    }
-
-                    if (!downloads.some((s: any) => s.id === currentTrack.id)) {
-                        downloads.push({
-                            ...currentTrack,
-                            localUri: result.uri,
-                            downloadedAt: new Date().toISOString()
-                        });
-                        await FileSystem.writeAsStringAsync(metadataFile, JSON.stringify(downloads));
-                        
-                        // Sync the store immediately
-                        useLibraryStore.getState().syncDownloadedSongs();
-                    }
-                } catch (metaErr) {
-                    console.error("Failed to save download metadata:", metaErr);
-                }
 
                 try {
                     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                } catch (hErr) { }
+                } catch (e) {}
 
                 Alert.alert(
                     "Download Complete",
                     `"${currentTrack.title}" has been saved for offline playback.`,
                     [
-                        { text: "OK", style: "default" },
+                        { text: "OK" },
                         { text: "Share", onPress: () => Sharing.shareAsync(result.uri) }
                     ]
                 );
-            } else {
-                throw new Error("Download failed: Resulting URI is empty.");
             }
         } catch (e: any) {
             console.error("[Download Error]:", e);
             setDownloadProgress(null);
-            Alert.alert("Download Error", `Failed to download: ${e.message || 'Unknown error'}`);
+            Alert.alert("Error", "Failed to download song.");
         }
     };
 
@@ -320,6 +279,14 @@ export default function PlayerScreen() {
                             transition={300}
                             contentFit="cover"
                         />
+                        {downloadProgress !== null && (
+                            <View className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/40 overflow-hidden">
+                                <View 
+                                    className="h-full bg-emerald-500" 
+                                    style={{ width: `${downloadProgress * 100}%` }} 
+                                />
+                            </View>
+                        )}
                     </View>
                 </View>
 
