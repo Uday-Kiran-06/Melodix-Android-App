@@ -13,6 +13,7 @@ import 'react-native-reanimated';
 import '../global.css';
 
 import { PlaybackService } from '@/services/TrackPlayerService';
+import { jioSaavnService } from '@/services/jiosaavn';
 import TrackPlayer, { AppKilledPlaybackBehavior, Capability } from 'react-native-track-player';
 
 import { AuthProvider, useAuth } from '@/components/AuthContext';
@@ -181,6 +182,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function onFetchUpdateAsync() {
+      if (!Updates.isEnabled) return;
+
       try {
         const update = await Updates.checkForUpdateAsync();
 
@@ -193,16 +196,25 @@ export default function RootLayout() {
               { 
                 text: "Update Now", 
                 onPress: async () => {
-                  await Updates.fetchUpdateAsync();
-                  await Updates.reloadAsync();
+                  try {
+                    await Updates.fetchUpdateAsync();
+                    await Updates.reloadAsync();
+                  } catch (e) {
+                    Alert.alert("Update Failed", "Failed to download the update. Please check your connection.");
+                  }
                 }
               }
             ]
           );
         }
-      } catch (error) {
-        // Log error or handle gracefully
-        console.log(`Error fetching latest Expo update: ${error}`);
+      } catch (error: any) {
+        // Only log connectivity-related errors if we are actually offline
+        const isConnected = await jioSaavnService.checkConnection();
+        if (isConnected) {
+          console.log(`Update check failed (Service Side): ${error.message}`);
+        } else {
+          console.log("Update check skipped: No internet connection.");
+        }
       }
     }
 
@@ -237,7 +249,7 @@ function RootLayoutNav({ loaded }: { loaded: boolean }) {
 
   useEffect(() => {
     const subscription = require('react-native').AppState.addEventListener('change', (nextAppState: string) => {
-      if (nextAppState === 'background' || nextAppState === 'inactive') {
+      if (nextAppState === 'background') {
         // App is being swiped away or backgrounded
         // The native stopWithApp should handle this, but explicit reset adds reliability
         // We only do this if it's explicitly desired - in some apps, background play is default.

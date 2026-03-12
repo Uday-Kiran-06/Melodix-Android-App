@@ -1,6 +1,7 @@
 import { useAuth } from '@/components/AuthContext';
 import GlassCard from '@/components/GlassCard';
 import MiniPlayer from '@/components/MiniPlayer';
+import { MusicImage } from '@/components/MusicImage';
 import SongMenu from '@/components/SongMenu';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
@@ -22,20 +23,10 @@ const SongRow = memo(({ song, onPlay, onToggleLike, isDark }: any) => (
     >
         <GlassCard intensity={20}>
             <View className="flex-row items-center p-3">
-                {jioSaavnService.sanitizeImageUrl(song.image) ? (
-                    <Image
-                        source={{ uri: jioSaavnService.sanitizeImageUrl(song.image) as string }}
-                        className="w-12 h-12 rounded-lg mr-4"
-                        transition={200}
-                        contentFit="cover"
-                        placeholder={require('../assets/images/favicon.png')}
-                        onError={(e) => console.log(`[Liked Song Image Error]: ${song.id}`, e.error)}
-                    />
-                ) : (
-                    <View className="w-12 h-12 bg-zinc-800 rounded-lg mr-4 items-center justify-center">
-                        <Play size={18} color="#71717a" />
-                    </View>
-                )}
+                <MusicImage
+                    images={song.image}
+                    className="w-12 h-12 rounded-lg mr-4"
+                />
                 <View className="flex-1">
                     <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-semibold`} numberOfLines={1}>{(song as any)?.name || (song as any)?.title || 'Unknown'}</Text>
                     <Text className="text-gray-400 text-sm" numberOfLines={1}>

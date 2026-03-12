@@ -33,36 +33,35 @@ export const PlaybackService = async function () {
             if (event.paused) {
                 await TrackPlayer.pause();
             } else {
-                // If it's a ducking event, lower the volume
-                if ((event as any).ducking) {
-                    await TrackPlayer.setVolume(0.3);
-                } else {
-                    // Otherwise, restore the volume
-                    await TrackPlayer.setVolume(1);
-                    // And ensure playback continues if it was transiently paused
-                    const state = await TrackPlayer.getState();
-                    if (state !== State.Playing) {
-                        await TrackPlayer.play();
-                    }
+                // Rely on native ducking for transient interruptions
+                const state = await TrackPlayer.getState();
+                if (state !== State.Playing) {
+                    await TrackPlayer.play();
                 }
             }
         }
     });
 
+    let lastLoadedTrackIndex = -1;
     TrackPlayer.addEventListener(Event.PlaybackTrackChanged, async (event) => {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
         
-        if (event.nextTrack !== undefined) {
-            const track = await TrackPlayer.getTrack(event.nextTrack);
-            store.setCurrentTrack(track);
+        if (event.nextTrack !== undefined && event.nextTrack !== null) {
+            // Prevent duplicate triggers for the same track index
+            if (lastLoadedTrackIndex === event.nextTrack) return;
+            lastLoadedTrackIndex = event.nextTrack;
 
-            // Load more recommendations if we're nearing the end of the queue
-            const queue = await TrackPlayer.getQueue();
-            if (event.nextTrack >= queue.length - 3) {
-                const currentTrack = queue[event.nextTrack];
-                if (currentTrack?.id) {
-                    store.loadRecommendations(currentTrack.id);
+            const track = await TrackPlayer.getTrack(event.nextTrack);
+            if (track) {
+                store.setCurrentTrack(track);
+
+                // Load more recommendations if we're nearing the end of the queue
+                const queue = await TrackPlayer.getQueue();
+                if (event.nextTrack >= queue.length - 3) {
+                    if (track.id) {
+                        store.loadRecommendations(track.id);
+                    }
                 }
             }
         }

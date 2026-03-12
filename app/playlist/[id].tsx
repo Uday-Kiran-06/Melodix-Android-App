@@ -69,7 +69,7 @@ export default function PlaylistScreen() {
                             className="mb-4"
                         >
                             <GlassCard intensity={20}>
-                                <View className="flex-row items-center">
+                                <View className="flex-row items-center p-3">
                                     <MusicImage
                                         images={song.image}
                                         className="w-14 h-14 rounded-lg mr-4"

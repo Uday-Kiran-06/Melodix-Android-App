@@ -25,6 +25,11 @@ export const MusicImage = memo(({
     blurRadius
 }: MusicImageProps) => {
     const [error, setError] = useState(false);
+    
+    // Reset error state when images prop changes
+    React.useEffect(() => {
+        setError(false);
+    }, [images]);
 
     // Sanitize the URL using the service
     const imageUrl = jioSaavnService.sanitizeImageUrl(images);

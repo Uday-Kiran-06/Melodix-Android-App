@@ -179,22 +179,47 @@ export const usePlayerStore = create<PlayerState>()(
                 }
             },
 
-            toggleShuffle: () => {
+            toggleShuffle: async () => {
                 const { shuffle, queue, originalQueue, currentTrack } = get();
                 try {
-                    Haptics.selectionAsync();
+                    await Haptics.selectionAsync();
                 } catch (e) { }
                 const newShuffle = !shuffle;
                 set({ shuffle: newShuffle });
 
                 if (newShuffle) {
-                    const shuffled = [...queue].sort(() => Math.random() - 0.5);
-                    set({ queue: shuffled });
-                    TrackPlayer.removeUpcomingTracks(); // Simplified for now
-                    TrackPlayer.add(shuffled.filter(t => t.id !== currentTrack?.id));
+                    // Reorder remaining queue
+                    const currentIndex = await TrackPlayer.getActiveTrackIndex();
+                    const currentQueue = await TrackPlayer.getQueue();
+                    
+                    const before = currentQueue.slice(0, (currentIndex || 0) + 1);
+                    const after = currentQueue.slice((currentIndex || 0) + 1);
+                    
+                    // Shuffle only the upcoming tracks
+                    const shuffledAfter = [...after].sort(() => Math.random() - 0.5);
+                    
+                    await TrackPlayer.removeUpcomingTracks();
+                    if (shuffledAfter.length > 0) {
+                        await TrackPlayer.add(shuffledAfter);
+                    }
+                    
+                    set({ queue: [...before, ...shuffledAfter] });
                 } else {
-                    set({ queue: [...originalQueue] });
-                    // Re-sync TrackPlayer queue if needed
+                    // Revert to original order for upcoming tracks
+                    const currentIndex = await TrackPlayer.getActiveTrackIndex() || 0;
+                    const playingId = currentTrack?.id;
+                    
+                    const originalIdx = originalQueue.findIndex(t => t.id === playingId);
+                    if (originalIdx !== -1) {
+                        const nextInOriginal = originalQueue.slice(originalIdx + 1);
+                        await TrackPlayer.removeUpcomingTracks();
+                        if (nextInOriginal.length > 0) {
+                            await TrackPlayer.add(nextInOriginal);
+                        }
+                        
+                        const currentShown = queue.slice(0, currentIndex + 1);
+                        set({ queue: [...currentShown, ...nextInOriginal] });
+                    }
                 }
             },
 

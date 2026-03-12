@@ -7,8 +7,19 @@ import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import Slider from '@react-native-community/slider';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -121,21 +132,52 @@ export default function PlayerScreen() {
 
             console.log(`[Download Start]: ${currentTrack.url} -> ${fileUri}`);
 
+            const notificationId = `download-${currentTrack.id || Date.now()}`;
+            let lastUpdate = Date.now();
+
             const downloadResumable = FileSystem.createDownloadResumable(
                 currentTrack.url,
                 fileUri,
                 {},
-                (progressData: any) => {
+                async (progressData: any) => {
                     const progress = progressData.totalBytesWritten / progressData.totalBytesExpectedToWrite;
                     setDownloadProgress(progress);
+
+                    const now = Date.now();
+                    if (now - lastUpdate > 1000 || progress === 1) {
+                        lastUpdate = now;
+                        try {
+                            await Notifications.scheduleNotificationAsync({
+                                identifier: notificationId,
+                                content: {
+                                    title: `Downloading: ${cleanTitle}`,
+                                    body: `Progress: ${Math.round(progress * 100)}%`,
+                                },
+                                trigger: null,
+                            });
+                        } catch (e) {}
+                    }
                 }
             );
 
             const result = await downloadResumable.downloadAsync();
             setDownloadProgress(null);
 
+            try { await Notifications.dismissNotificationAsync(notificationId); } catch(e) {}
+
             if (result && result.uri) {
                 console.log(`[Download Success]: Saved to ${result.uri}`);
+                
+                try {
+                    await Notifications.scheduleNotificationAsync({
+                        identifier: `${notificationId}-complete`,
+                        content: {
+                            title: "Download Complete",
+                            body: `"${currentTrack.title}" has been saved for offline playback.`
+                        },
+                        trigger: null
+                    });
+                } catch (e) {}
                 // Save metadata for library sync
                 try {
                     const metadataFile = `${FileSystem.documentDirectory}Melodix/downloads_metadata.json`;

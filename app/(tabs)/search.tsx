@@ -25,7 +25,7 @@ const SongItem = memo(({ item, onPlay, onToggleLike, onMore, isDark, results }: 
     <View className="mb-4 flex-row items-center">
       <TouchableOpacity onPress={() => onPlay?.(item, results)} className="flex-1 flex-row items-center">
         <MusicImage
-          images={item}
+          images={item.image}
           className="w-14 h-14 rounded-lg mr-4"
         />
         <View className="flex-1">
@@ -57,7 +57,7 @@ const AlbumItem = memo(({ item, onPress, isDark }: any) => (
     onPress={onPress}
   >
     <MusicImage
-      images={item}
+      images={item.image}
       className="w-full aspect-square rounded-lg mb-2"
     />
     <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-bold text-sm`} numberOfLines={1}>{item.name}</Text>
@@ -71,7 +71,7 @@ const PlaylistItem = memo(({ item, onPress, isDark }: any) => (
     onPress={onPress}
   >
     <MusicImage
-      images={item}
+      images={item.image}
       className="w-full aspect-square rounded-lg mb-2"
     />
     <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-bold text-sm`} numberOfLines={1}>{item.name}</Text>

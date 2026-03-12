@@ -8,6 +8,8 @@ import React from 'react';
 import { ScrollView, Switch, Text, TouchableOpacity, View, Alert } from 'react-native';
 import * as Updates from 'expo-updates';
 
+import { jioSaavnService } from '@/services/jiosaavn';
+
 export default function SettingsScreen() {
     const { user, signOut } = useAuth();
     const { audioQuality, setAudioQuality, theme, setTheme } = useSettingsStore();
@@ -30,6 +32,11 @@ export default function SettingsScreen() {
             Alert.alert("Development Mode", "Updates are not available in development mode.");
             return;
         }
+
+        if (!Updates.isEnabled) {
+            Alert.alert("Updates Disabled", "Over-the-air updates are not enabled for this build.");
+            return;
+        }
         
         try {
             const update = await Updates.checkForUpdateAsync();
@@ -48,9 +55,29 @@ export default function SettingsScreen() {
             } else {
                 Alert.alert("Up to Date", "You are already on the latest version of Melodix.");
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Update check failed:", error);
-            Alert.alert("Update Error", "Failed to check for updates. Make sure you are connected to the internet.");
+            
+            const errorMessage = error?.message || "";
+            const isServiceUnreachable = errorMessage.includes("checkForUpdateAsync") || 
+                                       errorMessage.includes("Failed to check for update");
+
+            if (isServiceUnreachable) {
+                Alert.alert(
+                    "Update Service Offline",
+                    "The update service is currently unreachable or not configured for this build. This is common in development or preview versions.\n\nYou can always check the latest releases on our documentation or GitHub."
+                );
+            } else {
+                const isConnected = await jioSaavnService.checkConnection();
+                if (!isConnected) {
+                    Alert.alert("Connection Error", "Please check your internet connection and try again.");
+                } else {
+                    Alert.alert(
+                        "Update Error", 
+                        `An unexpected error occurred while checking for updates.\n\nCode: ${error.code || 'UNKNOWN'}\nMessage: ${errorMessage.split('\n')[0]}`
+                    );
+                }
+            }
         }
     };
 

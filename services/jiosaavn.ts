@@ -9,6 +9,22 @@ const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
 export const jioSaavnService = {
+    checkConnection: async (): Promise<boolean> => {
+        try {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 3000);
+            const response = await fetch("https://www.google.com", {
+                method: "HEAD",
+                mode: "no-cors",
+                signal: controller.signal,
+            });
+            clearTimeout(id);
+            return response.ok || response.type === 'opaque';
+        } catch (e) {
+            return false;
+        }
+    },
+
     isInternationalQuery: (query: string): boolean => {
         // Broad check for typical International (non-regional Indian) song/artist searches
         const lowerQuery = query.toLowerCase();
@@ -367,6 +383,50 @@ export const jioSaavnService = {
         } catch (error) {
             console.error("GetSongDetails failed:", error);
             throw error;
+        }
+    },
+
+    getMultipleSongsDetails: async (ids: string[]): Promise<Song[]> => {
+        if (!ids || ids.length === 0) return [];
+        
+        try {
+            const idString = ids.join(',');
+            // Primary and secondary endpoints
+            const endpoints = [`${PRIMARY_BASE_URL}/songs?ids=${idString}`, `${ENGLISH_BASE_URL}/songs?ids=${idString}`];
+
+            for (const url of endpoints) {
+                try {
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const data: { success: boolean; data: Song[] } = await response.json();
+                        const songs = data?.data || [];
+                        if (songs.length > 0) {
+                            const results = songs.map(song => ({
+                                ...song,
+                                name: jioSaavnService.decodeHtml(song.name),
+                                image: song.image ? jioSaavnService.sanitizeImageUrl(song.image) : null,
+                                artists: {
+                                    ...song.artists,
+                                    primary: song.artists?.primary?.map(a => ({
+                                        ...a,
+                                        name: jioSaavnService.decodeHtml(a.name),
+                                        image: a.image ? jioSaavnService.sanitizeImageUrl(a.image) : null
+                                    }))
+                                }
+                            }));
+                            // Optionally cache these individually
+                            results.forEach(song => {
+                                cache.set(`song_${song.id}`, { data: song, timestamp: Date.now() });
+                            });
+                            return results;
+                        }
+                    }
+                } catch (e) { }
+            }
+            return [];
+        } catch (error) {
+            console.error("GetMultipleSongsDetails failed:", error);
+            return [];
         }
     },
 

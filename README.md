@@ -1,6 +1,6 @@
 # Melodix
 
-Melodix is a premium, high-performance music streaming application built with React Native and Expo. It features a stunning glassmorphism-inspired UI and a custom native audio engine for unparalleled sound control.
+Melodix is a premium, high-performance **free music streaming** application built with React Native and Expo. It features a stunning glassmorphism-inspired UI and a custom native audio engine for unparalleled sound control, providing unlimited access to millions of songs with no ads.
 
 ## 📱 Previews
 
@@ -41,6 +41,7 @@ Melodix is a premium, high-performance music streaming application built with Re
 
 ## ✨ Key Features
 
+- **Free Music Streaming**: Unlimited access to millions of songs without any subscription fees or ads.
 - **High-Fidelity Streaming**: Guaranteed 320 kbps audio quality for a crystal-clear listening experience.
 - **Native Audio Engine**: Custom-built Expo module interfacing directly with Android's native audio effects.
   - **5-Band Equalizer**: Fine-tune your sound with clinical precision.

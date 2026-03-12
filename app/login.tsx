@@ -31,7 +31,7 @@ export default function LoginScreen() {
             />
 
             <TouchableOpacity
-                onPress={() => router.back()}
+                onPress={() => router.replace('/(tabs)')}
                 className="absolute top-12 left-6 z-10 w-10 h-10 items-center justify-center rounded-full bg-zinc-900/50 border border-zinc-800"
             >
                 <ArrowLeft size={24} color="#fff" />

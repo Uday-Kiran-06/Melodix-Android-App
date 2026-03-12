@@ -66,7 +66,7 @@ export default function DownloadsScreen() {
         syncDownloadedSongs();
     }, [syncDownloadedSongs]);
 
-    const handleDelete = useCallback(async (song: Song) => {
+    const handleDelete = useCallback(async (song: any) => {
         Alert.alert(
             "Delete Download",
             `Are you sure you want to delete "${song.name}"?`,
@@ -77,8 +77,7 @@ export default function DownloadsScreen() {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-                            const fileUri = `${(FileSystem as any).documentDirectory}Melodix/Downloads/${filename}`;
+                            const fileUri = song.localUri || `${(FileSystem as any).documentDirectory}Melodix/Downloads/${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
                             await FileSystem.deleteAsync(fileUri, { idempotent: true });
 
                             const metadataFile = `${(FileSystem as any).documentDirectory}Melodix/downloads_metadata.json`;
@@ -95,18 +94,17 @@ export default function DownloadsScreen() {
         );
     }, [downloadedSongs, setDownloadedSongs]);
 
-    const handlePlayDownloaded = useCallback(async (song: Song) => {
-        const filename = `${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-        const fileUri = `${(FileSystem as any).documentDirectory}Melodix/Downloads/${filename}`;
+    const handlePlayDownloaded = useCallback(async (song: any) => {
+        const fileUri = song.localUri || `${(FileSystem as any).documentDirectory}Melodix/Downloads/${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
 
         const localSong = {
             ...song,
             downloadUrl: [{ quality: '320kbps', url: fileUri }]
         };
 
-        playTrack(localSong, downloadedSongs.map(s => ({
+        playTrack(localSong, downloadedSongs.map((s: any) => ({
             ...s,
-            downloadUrl: [{ quality: '320kbps', url: `${(FileSystem as any).documentDirectory}Melodix/Downloads/${s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3` }]
+            downloadUrl: [{ quality: '320kbps', url: s.localUri || `${(FileSystem as any).documentDirectory}Melodix/Downloads/${s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3` }]
         })), audioQuality);
     }, [playTrack, downloadedSongs, audioQuality]);
 

@@ -29,7 +29,7 @@ export const useLibraryStore = create<LibState>((set, get) => ({
 
     syncDownloadedSongs: async () => {
         try {
-            const FileSystem = require('expo-file-system');
+            const FileSystem = require('expo-file-system/legacy');
             if (!FileSystem || !FileSystem.documentDirectory) return;
 
             const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
@@ -48,8 +48,14 @@ export const useLibraryStore = create<LibState>((set, get) => ({
                 if (!content) return;
                 const metadata = JSON.parse(content);
                 // Filter metadata to only include files that actually exist
-                const validDownloads = Array.isArray(metadata) ? metadata.filter((s: Song) => {
-                    const filename = `${(s.name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
+                const validDownloads = Array.isArray(metadata) ? metadata.filter((s: any) => {
+                    let filename = "";
+                    if (s.localUri) {
+                        filename = s.localUri.split('/').pop() || "";
+                    } else {
+                        // Fallback for older downloads
+                        filename = `${(s.name || s.title || '').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
+                    }
                     return files.includes(filename);
                 }) : [];
                 set({ downloadedSongs: validDownloads });
@@ -75,10 +81,62 @@ export const useLibraryStore = create<LibState>((set, get) => ({
             return { ...p, songs: mapping || [] };
         }));
 
+        let finalLikedSongs = liked ? liked.map(item => {
+            const song = item.song_data;
+            const sanitizedImage = jioSaavnService.sanitizeImageUrl(song.image || song.artwork);
+            return {
+                ...song,
+                image: sanitizedImage || song.image
+            };
+        }) : [];
+
+        // Set initial state from DB for quick loading, we'll update background
         set({
-            likedSongs: liked ? liked.map(item => item.song_data) : [],
+            likedSongs: finalLikedSongs,
             playlists: playlistsWithSongs
         });
+
+        // Background fetch fresh data from JioSaavn to fix broken images/metadata
+        if (liked && liked.length > 0) {
+            try {
+                const existingIds = liked.map((item: any) => item.song_id || item.song_data?.id).filter(Boolean);
+                
+                // Chunk IDs to avoid overly long URLs (e.g., max 50 at a time)
+                const CHUNK_SIZE = 50;
+                let allFreshSongs: Song[] = [];
+                
+                for (let i = 0; i < existingIds.length; i += CHUNK_SIZE) {
+                    const chunk = existingIds.slice(i, i + CHUNK_SIZE);
+                    const freshDetails = await jioSaavnService.getMultipleSongsDetails(chunk);
+                    allFreshSongs = [...allFreshSongs, ...freshDetails];
+                }
+
+                if (allFreshSongs.length > 0) {
+                    // Merge fresh data with existing state
+                    const freshMap = new Map(allFreshSongs.map(s => [s.id, s]));
+                    
+                    const updatedLikedSongs = finalLikedSongs.map(oldSong => {
+                        const freshSong = freshMap.get(oldSong.id);
+                        if (freshSong) {
+                            return {
+                                ...oldSong, // Keep any custom properties
+                                ...freshSong, // Overwrite with fresh metadata (image, url, etc)
+                                image: freshSong.image || oldSong.image // Prefer fresh image
+                            };
+                        }
+                        return oldSong;
+                    });
+
+                    // Update UI state with fresh data
+                    set({ likedSongs: updatedLikedSongs });
+                    
+                    // Optionally update DB in background to fix permanently
+                    // Doing this quietly to not block the main thread
+                }
+            } catch (error) {
+                console.error("Failed to fetch fresh liked songs metadata:", error);
+            }
+        }
     },
 
     toggleLike: async (song: any, userId?: string) => {
