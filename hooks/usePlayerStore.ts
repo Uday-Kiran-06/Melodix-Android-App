@@ -32,6 +32,7 @@ interface PlayerState {
     setSleepTimer: (minutes: number | null) => void;
     initPlayer: () => Promise<void>;
     loadRecommendations: (songId: string) => Promise<void>;
+    isLoadingRecommendations: boolean;
 }
 
 // Map quality selection to JioSaavn API download link keys
@@ -64,6 +65,7 @@ export const usePlayerStore = create<PlayerState>()(
             originalQueue: [],
             sleepTimer: null,
             remainingTime: null,
+            isLoadingRecommendations: false,
             setCurrentTrack: (track) => set({ currentTrack: track }),
             setIsPlaying: (playing) => set({ isPlaying: playing }),
             setShuffle: (shuffle) => set({ shuffle }),
@@ -341,13 +343,16 @@ export const usePlayerStore = create<PlayerState>()(
             },
 
             loadRecommendations: async (songId: string) => {
-                const { queue } = get();
+                const { queue, isLoadingRecommendations } = get();
+                if (isLoadingRecommendations) return;
+
+                set({ isLoadingRecommendations: true });
                 try {
                     const recommendations = await jioSaavnService.getRecommendations(songId);
                     if (recommendations && recommendations.length > 0) {
-                        const existingIds = new Set(queue.map(t => t.id));
+                        const existingIds = new Set(get().queue.map(t => t.id));
                         const recommendedTracks: Track[] = recommendations
-                            .filter((item: any) => !existingIds.has(item.id))
+                            .filter((item: any) => !existingIds.has(String(item.id)))
                             .map((item: any) => ({
                                 id: String(item.id),
                                 url: item.downloadUrl ? (item.downloadUrl[4]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
@@ -374,6 +379,8 @@ export const usePlayerStore = create<PlayerState>()(
                     }
                 } catch (e) {
                     console.error("Failed to load recommendations:", e);
+                } finally {
+                    set({ isLoadingRecommendations: false });
                 }
             },
         }),

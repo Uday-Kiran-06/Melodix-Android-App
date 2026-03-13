@@ -67,6 +67,8 @@ export const useAudioEffects = () => {
         }
     }, [isLoudnessEnabled, loudnessGain]);
 
+    const lastSkipTrackId = useRef<string | null>(null);
+
     // Crossfade Logic
     useEffect(() => {
         if (!crossfadeEnabled || !isPlaying || duration <= 0 || isTransitioning.current) return;
@@ -75,9 +77,13 @@ export const useAudioEffects = () => {
         const fadeThreshold = crossfadeDuration;
 
         if (timeLeft > 0 && timeLeft <= fadeThreshold) {
-            isTransitioning.current = true;
-            
             const performCrossfade = async () => {
+                const activeTrack = await TrackPlayer.getActiveTrack();
+                if (!activeTrack || lastSkipTrackId.current === activeTrack.id) return;
+                
+                isTransitioning.current = true;
+                lastSkipTrackId.current = activeTrack.id;
+
                 const steps = 20;
                 const stepDelay = (fadeThreshold * 1000) / steps;
                 
@@ -97,41 +103,46 @@ export const useAudioEffects = () => {
                     const queue = await TrackPlayer.getQueue();
                     const index = await TrackPlayer.getActiveTrackIndex();
                     
-                    if (index !== undefined && index < queue.length - 1) {
-                        await TrackPlayer.skipToNext();
-                        
-                        // 3. Fade In
-                        const targetGain = isLoudnessEnabled ? loudnessGain : 1000;
-                        const gainStepIn = targetGain / steps;
-                        
-                        AudioEffects.setEnabled('loudness', true);
-                        AudioEffects.setLoudnessGain(0);
-                        
-                        for (let i = 1; i <= steps; i++) {
-                            const nextGain = Math.min(targetGain, gainStepIn * i);
-                            AudioEffects.setLoudnessGain(Math.round(nextGain));
-                            await new Promise(resolve => setTimeout(resolve, stepDelay));
-                        }
-                        AudioEffects.setLoudnessGain(targetGain);
-                        
-                        // 4. Restore original loudness enabled state if it was off
-                        if (!isLoudnessEnabled) {
-                            AudioEffects.setEnabled('loudness', false);
+                    // Check again if we are still on the same track before skipping
+                    const currentTrack = await TrackPlayer.getActiveTrack();
+                    if (currentTrack?.id === lastSkipTrackId.current) {
+                        if (index !== undefined && index < queue.length - 1) {
+                            await TrackPlayer.skipToNext();
+                            
+                            // 3. Fade In
+                            const targetGain = isLoudnessEnabled ? loudnessGain : 1000;
+                            const gainStepIn = targetGain / steps;
+                            
+                            AudioEffects.setEnabled('loudness', true);
+                            AudioEffects.setLoudnessGain(0);
+                            
+                            for (let i = 1; i <= steps; i++) {
+                                const nextGain = Math.min(targetGain, gainStepIn * i);
+                                AudioEffects.setLoudnessGain(Math.round(nextGain));
+                                await new Promise(resolve => setTimeout(resolve, stepDelay));
+                            }
+                            AudioEffects.setLoudnessGain(targetGain);
+                            
+                            // 4. Restore original loudness enabled state if it was off
+                            if (!isLoudnessEnabled) {
+                                AudioEffects.setEnabled('loudness', false);
+                            }
                         }
                     }
                 } catch (e) {
                     console.error('Crossfade failed:', e);
                 } finally {
+                    // Stay in transitioning state for a bit to allow the next track to settle
                     setTimeout(() => {
                         isTransitioning.current = false;
-                    }, 500);
+                    }, 2000);
                 }
             };
 
             performCrossfade();
         }
 
-        // Reset flag if we are at the beginning of a track
+        // Reset flag/lock if we are at the beginning of a track
         if (position < 1 && isTransitioning.current) {
             isTransitioning.current = false;
         }

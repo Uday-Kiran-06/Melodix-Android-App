@@ -42,26 +42,24 @@ export const PlaybackService = async function () {
         }
     });
 
-    let lastLoadedTrackIndex = -1;
-    TrackPlayer.addEventListener(Event.PlaybackTrackChanged, async (event) => {
+    let lastTrackId: string | undefined = undefined;
+    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
         
-        if (event.nextTrack !== undefined && event.nextTrack !== null) {
-            // Prevent duplicate triggers for the same track index
-            if (lastLoadedTrackIndex === event.nextTrack) return;
-            lastLoadedTrackIndex = event.nextTrack;
+        if (event.track !== undefined && event.track !== null) {
+            // Prevent duplicate triggers for the same track ID
+            if (lastTrackId === event.track.id) return;
+            lastTrackId = event.track.id;
 
-            const track = await TrackPlayer.getTrack(event.nextTrack);
-            if (track) {
-                store.setCurrentTrack(track);
+            store.setCurrentTrack(event.track);
 
-                // Load more recommendations if we're nearing the end of the queue
-                const queue = await TrackPlayer.getQueue();
-                if (event.nextTrack >= queue.length - 3) {
-                    if (track.id) {
-                        store.loadRecommendations(track.id);
-                    }
+            // Load more recommendations if we're nearing the end of the queue
+            const index = event.index;
+            const queue = await TrackPlayer.getQueue();
+            if (index !== undefined && index >= queue.length - 3) {
+                if (event.track.id) {
+                    store.loadRecommendations(event.track.id);
                 }
             }
         }

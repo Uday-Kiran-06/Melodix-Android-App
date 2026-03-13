@@ -89,19 +89,27 @@ export const useLibraryStore = create<LibState>((set, get) => ({
         }
 
         try {
-            // 1. Save to Media Library
-            const { status } = await MediaLibrary.requestPermissionsAsync();
+            // 1. Save to Media Library (Public Storage)
+            const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync();
+            
             if (status !== 'granted') {
-                console.warn("[Media Library]: Permission not granted");
-                // We still proceed with SQLite saving as the file exists in documentDirectory
+                console.warn("[Media Library]: Permission not granted for storage sync");
             } else {
-                const asset = await MediaLibrary.createAssetAsync(localUri);
-                const albumName = 'Melodix';
-                const album = await MediaLibrary.getAlbumAsync(albumName);
-                if (album === null) {
-                    await MediaLibrary.createAlbumAsync(albumName, asset, false);
-                } else {
-                    await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+                try {
+                    // Create asset from the downloaded file
+                    const asset = await MediaLibrary.createAssetAsync(localUri);
+                    const albumName = 'Melodix';
+                    let album = await MediaLibrary.getAlbumAsync(albumName);
+                    
+                    if (album === null) {
+                        await MediaLibrary.createAlbumAsync(albumName, asset, false);
+                        console.log(`[Media Library]: Created album "${albumName}" with asset`);
+                    } else {
+                        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+                        console.log(`[Media Library]: Added asset to album "${albumName}"`);
+                    }
+                } catch (mediaError) {
+                    console.error("[Media Library Error]: Failed to sync to public storage", mediaError);
                 }
             }
 

@@ -2,7 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
 import { ArrowLeft, Lock, Mail, Music } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
+import { useAuth } from '../components/AuthContext';
 import GlassCard from '../components/GlassCard';
 import { supabase } from '../services/supabase';
 
@@ -10,7 +11,9 @@ export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const router = useRouter();
+    const { signInWithGoogle } = useAuth();
 
     const handleLogin = async () => {
         setLoading(true);
@@ -21,6 +24,17 @@ export default function LoginScreen() {
             router.replace('/(tabs)');
         }
         setLoading(false);
+    };
+
+    const handleGoogleLogin = async () => {
+        setGoogleLoading(true);
+        try {
+            await signInWithGoogle();
+        } catch (error: any) {
+            Alert.alert('Google Login Error', error.message);
+        } finally {
+            setGoogleLoading(false);
+        }
     };
 
     return (
@@ -81,12 +95,35 @@ export default function LoginScreen() {
 
                     <TouchableOpacity
                         onPress={handleLogin}
-                        disabled={loading}
-                        className="bg-emerald-600 py-4 rounded-xl items-center"
+                        disabled={loading || googleLoading}
+                        className="bg-emerald-600 py-4 rounded-xl items-center mb-4"
                     >
                         <Text className="text-white font-bold text-lg">
                             {loading ? 'Logging in...' : 'Sign In'}
                         </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        onPress={handleGoogleLogin}
+                        disabled={loading || googleLoading}
+                        className="bg-white py-4 rounded-xl items-center flex-row justify-center shadow-lg"
+                        style={{ elevation: 3 }}
+                    >
+                        {googleLoading ? (
+                            <ActivityIndicator color="#000" size="small" />
+                        ) : (
+                            <>
+                                <Image 
+                                    source={{ uri: 'https://developers.google.com/static/identity/images/g-logo.png' }} 
+                                    style={{ width: 24, height: 24 }}
+                                    resizeMode="contain"
+                                    className="mr-3"
+                                />
+                                <Text className="text-zinc-900 font-bold text-lg">
+                                    Continue with Google
+                                </Text>
+                            </>
+                        )}
                     </TouchableOpacity>
 
                     <View className="flex-row justify-center mt-6">
