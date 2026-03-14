@@ -5,7 +5,11 @@ export const PlaybackService = async function () {
     TrackPlayer.addEventListener(Event.RemotePause, () => { console.log('RemotePause'); TrackPlayer.pause(); });
     TrackPlayer.addEventListener(Event.RemoteNext, () => { console.log('RemoteNext'); TrackPlayer.skipToNext(); });
     TrackPlayer.addEventListener(Event.RemotePrevious, () => { console.log('RemotePrevious'); TrackPlayer.skipToPrevious(); });
-    TrackPlayer.addEventListener(Event.RemoteStop, () => { console.log('RemoteStop'); TrackPlayer.reset(); });
+    TrackPlayer.addEventListener(Event.RemoteStop, async () => { 
+        console.log('RemoteStop'); 
+        await TrackPlayer.stop();
+        await TrackPlayer.reset(); 
+    });
     TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
         console.log('RemoteSeek to:', event.position);
         await TrackPlayer.seekTo(event.position);

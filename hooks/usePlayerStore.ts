@@ -138,34 +138,37 @@ export const usePlayerStore = create<PlayerState>()(
 
                 // Vibe Match: Automatically add recommendations to queue
                 try {
-                    const recommendations = await jioSaavnService.getRecommendations(trackData.id);
+                    const isConnected = await jioSaavnService.checkConnection();
+                    if (isConnected) {
+                        const recommendations = await jioSaavnService.getRecommendations(trackData.id);
 
-                    if (recommendations && recommendations.length > 0) {
-                        const existingIds = new Set(queueToPlay.map(t => t.id));
-                        const recommendedTracks: Track[] = recommendations
-                            .filter((item: any) => !existingIds.has(item.id))
-                            .map((item: any) => ({
-                                id: String(item.id),
-                                url: item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
-                                title: cleanMetadata(item.name || item.title, "Unknown Track"),
-                                artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
-                                artwork: cleanMetadata(
-                                    typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
-                                    undefined
-                                ),
-                                album: cleanMetadata(item.album?.name || item.album, "Single"),
-                                description: cleanMetadata(item.name || item.title, "Unknown Track"),
-                                genre: cleanMetadata(item.language, "Music"),
-                                ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
-                                isLiveStream: false,
-                            }));
+                        if (recommendations && recommendations.length > 0) {
+                            const existingIds = new Set(queueToPlay.map(t => t.id));
+                            const recommendedTracks: Track[] = recommendations
+                                .filter((item: any) => !existingIds.has(item.id))
+                                .map((item: any) => ({
+                                    id: String(item.id),
+                                    url: item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
+                                    title: cleanMetadata(item.name || item.title, "Unknown Track"),
+                                    artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
+                                    artwork: cleanMetadata(
+                                        typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
+                                        undefined
+                                    ),
+                                    album: cleanMetadata(item.album?.name || item.album, "Single"),
+                                    description: cleanMetadata(item.name || item.title, "Unknown Track"),
+                                    genre: cleanMetadata(item.language, "Music"),
+                                    ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
+                                    isLiveStream: false,
+                                }));
 
-                        if (recommendedTracks.length > 0) {
-                            await TrackPlayer.add(recommendedTracks);
-                            set((state) => ({
-                                queue: [...state.queue, ...recommendedTracks],
-                                originalQueue: [...state.originalQueue, ...recommendedTracks]
-                            }));
+                            if (recommendedTracks.length > 0) {
+                                await TrackPlayer.add(recommendedTracks);
+                                set((state) => ({
+                                    queue: [...state.queue, ...recommendedTracks],
+                                    originalQueue: [...state.originalQueue, ...recommendedTracks]
+                                }));
+                            }
                         }
                     }
                 } catch (e) {

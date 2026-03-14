@@ -29,12 +29,12 @@ Melodix is a premium, high-performance **free music streaming** application buil
     <tr>
       <td><img src="./assets/previews/podcasts.jpg" width="200" alt="Podcasts" /></td>
       <td><img src="./assets/previews/app_icon.jpg" width="200" alt="App Icon" /></td>
-      <td></td>
+      <td><img src="./assets/previews/login.jpg" width="200" alt="Login" /></td>
     </tr>
     <tr>
       <td align="center"><b>Podcasts</b></td>
       <td align="center"><b>App Icon</b></td>
-      <td></td>
+      <td align="center"><b>Login</b></td>
     </tr>
   </table>
 </div>
@@ -47,9 +47,11 @@ Melodix is a premium, high-performance **free music streaming** application buil
   - **5-Band Equalizer**: Fine-tune your sound with clinical precision.
   - **Bass Boost**: Powerful, adjustable low-end enhancement.
   - **Loudness Normalizer**: Consistent volume levels across all tracks.
-- **Premium UI/UX**: Modern glassmorphism design with smooth animations and haptic feedback.
-- **Smart Offline Support**: Advanced caching and robust download management for uninterrupted listening.
+- **Google Authentication**: Seamless and secure login experience with Google Sign-In support.
+- **Premium UI/UX**: Modern glassmorphism design with premium row previews, smooth animations, and haptics.
+- **Advanced Offline Support**: Full offline playlist support with "Play All" and "Shuffle" for downloaded music.
 - **Reliable Background Control**: Playback stops automatically when the app is removed from background.
+- **Public Storage Sync**: Robust MediaStore integration for Android 11+, ensuring downloads are visible in other apps.
 - **Global State Management**: Powered by Zustand for a lightning-fast and responsive interface.
 
 ## 🛠️ Tech Stack

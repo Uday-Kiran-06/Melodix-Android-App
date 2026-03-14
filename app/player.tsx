@@ -9,18 +9,8 @@ import { jioSaavnService } from '@/services/jiosaavn';
 import Slider from '@react-native-community/slider';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import {
@@ -31,7 +21,6 @@ import {
     ListMinus,
     ListMusic,
     ListPlus,
-    MinusCircle,
     MoreVertical,
     Pause,
     Play,
@@ -47,6 +36,15 @@ import { MotiView } from 'moti';
 import React, { useCallback, useState } from 'react';
 import { Alert, Dimensions, FlatList, Modal, Text, TouchableOpacity, View } from 'react-native';
 import TrackPlayer, { useProgress } from 'react-native-track-player';
+
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+    }),
+});
 
 const { width } = Dimensions.get('window');
 
@@ -110,7 +108,7 @@ export default function PlayerScreen() {
 
         try {
             setDownloadProgress(0);
-            
+
             const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
             const dirInfo = await FileSystem.getInfoAsync(downloadDir);
             if (!dirInfo.exists) {
@@ -147,14 +145,14 @@ export default function PlayerScreen() {
                                 },
                                 trigger: null,
                             });
-                        } catch (e) {}
+                        } catch (e) { }
                     }
                 }
             );
 
             const result = await downloadResumable.downloadAsync();
             setDownloadProgress(null);
-            try { await Notifications.dismissNotificationAsync(notificationId); } catch(e) {}
+            try { await Notifications.dismissNotificationAsync(notificationId); } catch (e) { }
 
             if (result && result.uri) {
                 // Save to SQLite & Media Library
@@ -169,11 +167,11 @@ export default function PlayerScreen() {
                         },
                         trigger: null
                     });
-                } catch (e) {}
+                } catch (e) { }
 
                 try {
                     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                } catch (e) {}
+                } catch (e) { }
 
                 Alert.alert(
                     "Download Complete",
@@ -281,9 +279,9 @@ export default function PlayerScreen() {
                         />
                         {downloadProgress !== null && (
                             <View className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/40 overflow-hidden">
-                                <View 
-                                    className="h-full bg-emerald-500" 
-                                    style={{ width: `${downloadProgress * 100}%` }} 
+                                <View
+                                    className="h-full bg-emerald-500"
+                                    style={{ width: `${downloadProgress * 100}%` }}
                                 />
                             </View>
                         )}
@@ -369,10 +367,10 @@ export default function PlayerScreen() {
                         <Plus size={24} color="#fff" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleDownload}>
-                         <Download size={24} color={downloadProgress !== null ? "#1DB954" : "#fff"} />
+                        <Download size={24} color={downloadProgress !== null ? "#1DB954" : "#fff"} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setIsSleepTimerModalVisible(true)}>
-                            <Clock size={24} color={sleepTimer ? "#1DB954" : "#fff"} />
+                        <Clock size={24} color={sleepTimer ? "#1DB954" : "#fff"} />
                     </TouchableOpacity>
                 </View>
             </View>

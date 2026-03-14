@@ -81,7 +81,7 @@ export const useLibraryStore = create<LibState>((set, get) => ({
         }
     },
 
-    saveDownload: async (song, localUri) => {
+    saveDownload: async (song: any, localUri) => {
         const db = getDb();
         if (!db) {
             console.warn("[SQLite Store]: Cannot save download, database not available");
@@ -89,39 +89,60 @@ export const useLibraryStore = create<LibState>((set, get) => ({
         }
 
         try {
-            // 1. Save to Media Library (Public Storage)
-            const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync();
+            // 1. Normalize Song Data (Player object has 'title'/'artist', Library needs 'name'/'artists')
+            const sanitizedImage = jioSaavnService.sanitizeImageUrl(song.image || song.artwork || song.artworkUrl || song.artwork_url);
+            const normalizedSong: Song = {
+                ...song,
+                id: song.id,
+                name: song.name || song.title || "Unknown Track",
+                duration: song.duration || 0,
+                image: sanitizedImage,
+                artists: song.artists || {
+                    primary: [{ name: song.artist || "Unknown Artist", id: "", role: "", image: null, url: "" }],
+                    featured: [],
+                    all: []
+                },
+                downloadUrl: Array.isArray(song.downloadUrl) ? song.downloadUrl : []
+            };
+
+            // 2. Save to Media Library (Public Storage)
+            const { status } = await MediaLibrary.requestPermissionsAsync();
             
             if (status !== 'granted') {
                 console.warn("[Media Library]: Permission not granted for storage sync");
             } else {
                 try {
-                    // Create asset from the downloaded file
-                    const asset = await MediaLibrary.createAssetAsync(localUri);
-                    const albumName = 'Melodix';
+                    // Create a temporary copy in cacheDirectory for MediaLibrary to ingest
+                    // This avoids permission issues sometimes seen with documentDirectory files
+                    const tempCacheUri = `${FileSystem.cacheDirectory}${normalizedSong.name.replace(/\s+/g, '_')}_${normalizedSong.id}.mp3`;
+                    await FileSystem.copyAsync({ from: localUri, to: tempCacheUri });
+                    
+                    const asset = await MediaLibrary.createAssetAsync(tempCacheUri);
+                    const albumName = 'Melodix Music'; // Changed name slightly to ensure fresh categorization
                     let album = await MediaLibrary.getAlbumAsync(albumName);
                     
                     if (album === null) {
-                        await MediaLibrary.createAlbumAsync(albumName, asset, false);
-                        console.log(`[Media Library]: Created album "${albumName}" with asset`);
+                        await MediaLibrary.createAlbumAsync(albumName, asset, true);
                     } else {
-                        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
-                        console.log(`[Media Library]: Added asset to album "${albumName}"`);
+                        await MediaLibrary.addAssetsToAlbumAsync([asset], album, true);
                     }
-                } catch (mediaError) {
-                    console.error("[Media Library Error]: Failed to sync to public storage", mediaError);
+                    
+                    // Cleanup cache
+                    await FileSystem.deleteAsync(tempCacheUri, { idempotent: true });
+                } catch (mediaError: any) {
+                    console.error("[Media Library Error]:", mediaError.message);
                 }
             }
 
-            // 2. Save to SQLite
+            // 3. Save to SQLite
             db.runSync(
                 `INSERT OR REPLACE INTO downloads (id, name, localUri, downloadUrl) 
                  VALUES (?, ?, ?, ?)`,
                 [
-                    song.id, 
-                    song.name,
+                    normalizedSong.id, 
+                    normalizedSong.name,
                     localUri,
-                    JSON.stringify(song)
+                    JSON.stringify(normalizedSong)
                 ]
             );
             await get().syncDownloadedSongs();
@@ -156,12 +177,27 @@ export const useLibraryStore = create<LibState>((set, get) => ({
         try {
             const rows = db.getAllSync('SELECT downloadUrl, localUri FROM downloads') as any[];
             const songs: Song[] = rows.map(r => {
-                const song = JSON.parse(r.downloadUrl);
-                return {
-                    ...song,
-                    localUri: r.localUri
-                };
-            });
+                try {
+                    const song = JSON.parse(r.downloadUrl);
+                    // Defensive normalization for existing/legacy entries
+                    const rawImage = song.image || song.artwork || song.artworkUrl || song.artwork_url || song.images;
+                    return {
+                        ...song,
+                        id: song.id,
+                        name: song.name || song.title || "Unknown Track",
+                        image: jioSaavnService.sanitizeImageUrl(rawImage),
+                        artists: song.artists || {
+                            primary: [{ name: song.artist || "Unknown Artist", id: "", role: "", image: null, url: "" }],
+                            featured: [],
+                            all: []
+                        },
+                        localUri: r.localUri
+                    };
+                } catch (e) {
+                    console.error("[Sync]: Failed to parse song JSON", e);
+                    return null;
+                }
+            }).filter((s): s is Song => s !== null);
             set({ downloadedSongs: songs });
         } catch (error) {
             console.error("Sync downloads error:", error);

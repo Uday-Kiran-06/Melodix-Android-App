@@ -3,11 +3,11 @@ import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { FlashList } from '@shopify/flash-list';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Download, Heart, ListMusic, MoreVertical, Plus, X } from 'lucide-react-native';
 import React, { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { MusicImage } from '@/components/MusicImage';
 
 const AnyFlashList = FlashList as any;
 
@@ -19,13 +19,9 @@ const LibraryRow = memo(({ title, subtitle, image, icon, onPress, onLongPress, t
     >
         <View className="mr-4">
             {image ? (
-                <Image
-                    source={jioSaavnService.sanitizeImageUrl(image) ? { uri: jioSaavnService.sanitizeImageUrl(image) } : require('../../assets/images/favicon.png')}
+                <MusicImage
+                    images={image}
                     className={`w-16 h-16 ${type === 'artist' ? 'rounded-full' : 'rounded-lg'}`}
-                    transition={200}
-                    contentFit="cover"
-                    placeholder={require('../../assets/images/favicon.png')}
-                    onError={(e) => console.log(`[Library Image Error]: ${image}`, e.error)}
                 />
             ) : (
                 <View className={`w-16 h-16 ${isDark ? 'bg-zinc-800' : 'bg-slate-200'} rounded-lg items-center justify-center`}>
@@ -42,11 +38,15 @@ const LibraryRow = memo(({ title, subtitle, image, icon, onPress, onLongPress, t
 ));
 
 export default function LibraryScreen() {
-    const { likedSongs, playlists, createPlaylist, deletePlaylist } = useLibraryStore();
+    const { likedSongs, playlists, createPlaylist, deletePlaylist, downloadedSongs, syncDownloadedSongs } = useLibraryStore();
     const { user } = useAuth();
     const { theme } = useSettingsStore();
     const isDark = theme === 'dark';
     const router = useRouter();
+    
+    React.useEffect(() => {
+        syncDownloadedSongs();
+    }, [syncDownloadedSongs]);
 
     const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
     const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -94,6 +94,7 @@ export default function LibraryScreen() {
                 type: 'fixed',
                 title: 'Liked Songs',
                 subtitle: `Playlist • ${likedSongs.length} songs`,
+                image: likedSongs[0]?.image,
                 icon: <Heart size={32} color="#fff" fill="#1DB954" />,
                 onPress: () => router.push('/liked-songs')
             });
@@ -101,7 +102,8 @@ export default function LibraryScreen() {
                 id: 'downloads',
                 type: 'fixed',
                 title: 'Downloads',
-                subtitle: 'Playlist • Offline music',
+                subtitle: `Playlist • ${downloadedSongs.length} songs`,
+                image: downloadedSongs[0]?.image,
                 icon: <Download size={32} color="#1DB954" />,
                 onPress: () => router.push('/downloads' as any)
             });
@@ -122,7 +124,7 @@ export default function LibraryScreen() {
         }
 
         return items;
-    }, [filter, likedSongs.length, playlists, user?.email, router, handleDeletePlaylist]);
+    }, [filter, likedSongs.length, downloadedSongs.length, playlists, user?.email, router, handleDeletePlaylist]);
 
     const renderItem = useCallback(({ item }: { item: any }) => (
         <LibraryRow
