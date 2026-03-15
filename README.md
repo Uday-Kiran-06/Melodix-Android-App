@@ -49,9 +49,9 @@ Melodix is a premium, high-performance **free music streaming** application buil
   - **Loudness Normalizer**: Consistent volume levels across all tracks.
 - **Google Authentication**: Seamless and secure login experience with Google Sign-In support.
 - **Premium UI/UX**: Modern glassmorphism design with premium row previews, smooth animations, and haptics.
-- **Advanced Offline Support**: Full offline playlist support with "Play All" and "Shuffle" for downloaded music.
-- **Reliable Background Control**: Playback stops automatically when the app is removed from background.
-- **Public Storage Sync**: Robust MediaStore integration for Android 11+, ensuring downloads are visible in other apps.
+- **Advanced Offline Support**: Full offline playlist support with persistent library state, recently added song image updates for the downloads folder, and robust "Play All/Shuffle" controls.
+- **Reliability & Stability**: Comprehensive defensive coding and crash prevention logic for seamless playback even with incomplete metadata or poor connectivity.
+- **Public Storage Sync**: Robust MediaStore integration for Android 11+, ensuring downloads are visible in other apps and synced automatically.
 - **Global State Management**: Powered by Zustand for a lightning-fast and responsive interface.
 
 ## 🛠️ Tech Stack
