@@ -86,17 +86,9 @@ export default function DownloadsScreen() {
     }, [deleteDownload]);
 
     const handlePlayDownloaded = useCallback(async (song: any) => {
-        const fileUri = song.localUri || `${(FileSystem as any).documentDirectory}Melodix/Downloads/${song.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-
-        const localSong = {
-            ...song,
-            downloadUrl: [{ quality: '320kbps', url: fileUri }]
-        };
-
-        playTrack(localSong, downloadedSongs.map((s: any) => ({
-            ...s,
-            downloadUrl: [{ quality: '320kbps', url: s.localUri || `${(FileSystem as any).documentDirectory}Melodix/Downloads/${s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3` }]
-        })), audioQuality);
+        // Just pass the song. playTrack will automatically find the localUri
+        // from downloadedSongs and verify it exists before playing local.
+        playTrack(song, downloadedSongs, audioQuality);
     }, [playTrack, downloadedSongs, audioQuality]);
 
     const handlePlayAll = useCallback(async () => {

@@ -61,10 +61,43 @@ export default function SongDetailsScreen() {
     const handleDownload = async () => {
         if (!song || !song.downloadUrl) return;
 
+        const { downloadedSongs, syncDownloadedSongs } = useLibraryStore.getState();
+        const downloadedTrack = downloadedSongs.find(s => s.id === song.id);
+
+        if (downloadedTrack?.localUri) {
+            const fileInfo = await FileSystem.getInfoAsync(downloadedTrack.localUri);
+            if (fileInfo.exists) {
+                Alert.alert("Already Downloaded", `"${song.name}" is already saved to your device.`);
+                return;
+            } else {
+                // Stale state, sync
+                console.log("[SongDetails]: Stale download detected, syncing...");
+                await syncDownloadedSongs();
+            }
+        }
+
         try {
             setDownloadProgress(0);
-            const qualityIdx = (audioQuality === '320kbps' || audioQuality === '160kbps') ? (song.downloadUrl.length > 4 ? 4 : song.downloadUrl.length - 1) : 0;
-            const url = song.downloadUrl[qualityIdx].url;
+            const qualityIdx = (audioQuality === '320kbps' || audioQuality === '160kbps') 
+                ? (song.downloadUrl.length > 4 ? 4 : Math.max(0, song.downloadUrl.length - 1)) 
+                : 0;
+            let url = song.downloadUrl[qualityIdx]?.url || song.downloadUrl[0]?.url;
+
+            if (!url) {
+                Alert.alert("Error", "No download source available for this track.");
+                return;
+            }
+
+            if (url.startsWith('file://')) {
+                // Find a remote URL instead
+                const remoteUrl = song.downloadUrl.find(u => u.url?.startsWith('http'))?.url;
+                if (remoteUrl) {
+                    url = remoteUrl;
+                } else {
+                    Alert.alert("Local File", "No remote source found for this track.");
+                    return;
+                }
+            }
 
             const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
             const dirInfo = await FileSystem.getInfoAsync(downloadDir);
@@ -330,14 +363,21 @@ export default function SongDetailsScreen() {
                                 ) : (
                                     <TouchableOpacity
                                         onPress={() => {
+                                            const qualityIdx = audioQuality === '320kbps' 
+                                                ? (song.downloadUrl.length > 4 ? 4 : Math.max(0, song.downloadUrl.length - 1)) 
+                                                : 0;
                                             const track: any = {
                                                 id: song.id,
-                                                url: song.downloadUrl[audioQuality === '320kbps' ? (song.downloadUrl.length > 4 ? 4 : song.downloadUrl.length - 1) : 0].url,
+                                                url: song.downloadUrl[qualityIdx]?.url || song.downloadUrl[0]?.url,
                                                 title: song.name,
                                                 artist: song.artists.primary?.[0]?.name,
                                                 artwork: jioSaavnService.sanitizeImageUrl(song.image),
                                                 duration: song.duration
                                             };
+                                            if (!track.url) {
+                                                Alert.alert("Error", "Cannot add to queue: No audio source found.");
+                                                return;
+                                            }
                                             addToQueue(track);
                                             setIsMenuVisible(false);
                                             Alert.alert("Queue", "Song added to queue");

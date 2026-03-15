@@ -36,6 +36,7 @@ export interface Song {
         quality: string;
         url: string;
     }[];
+    localUri?: string;
 }
 
 export interface SearchResponse {

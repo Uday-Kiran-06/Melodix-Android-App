@@ -106,6 +106,29 @@ export default function PlayerScreen() {
     const handleDownload = async () => {
         if (!currentTrack || !currentTrack.url) return;
 
+        const { downloadedSongs, syncDownloadedSongs } = useLibraryStore.getState();
+        const downloadedTrack = downloadedSongs.find(s => s.id === currentTrack.id);
+
+        if (downloadedTrack?.localUri) {
+            const fileInfo = await FileSystem.getInfoAsync(downloadedTrack.localUri);
+            if (fileInfo.exists) {
+                Alert.alert("Already Downloaded", `"${currentTrack.title}" is already saved to your device.`);
+                return;
+            } else {
+                // Stale state found, sync and continue
+                console.log("[Player]: Stale download detected, syncing...");
+                await syncDownloadedSongs();
+            }
+        }
+
+        if (currentTrack.url?.startsWith('file://')) {
+            const fileInfo = await FileSystem.getInfoAsync(currentTrack.url);
+            if (fileInfo.exists) {
+                Alert.alert("Local File", "This is a local file and cannot be downloaded again.");
+                return;
+            }
+        }
+
         try {
             setDownloadProgress(0);
 
@@ -125,8 +148,44 @@ export default function PlayerScreen() {
             const notificationId = `download-${currentTrack.id}`;
             let lastUpdate = Date.now();
 
+            let downloadUrl = currentTrack.url;
+            
+            // ALWAYS favor a remote URL for downloading
+            // @ts-ignore - custom property from usePlayerStore
+            const remoteUrls = currentTrack.originalDownloadUrl || (currentTrack as any).downloadUrl;
+            if (remoteUrls && Array.isArray(remoteUrls) && remoteUrls.length > 0) {
+                // Use high quality for download if possible
+                const qualityIdx = remoteUrls.length > 4 ? 4 : remoteUrls.length - 1;
+                const bestRemote = remoteUrls[qualityIdx]?.url || remoteUrls[0]?.url;
+                if (bestRemote && bestRemote.startsWith('http')) {
+                    downloadUrl = bestRemote;
+                }
+            } else if (downloadUrl?.startsWith('file://')) {
+                // If we still have a file:// URL, check if there's an originalUrl
+                // @ts-ignore
+                if (currentTrack.originalUrl?.startsWith('http')) {
+                    // @ts-ignore
+                    downloadUrl = currentTrack.originalUrl;
+                }
+            }
+
+            if (!downloadUrl || downloadUrl.startsWith('file://')) {
+                // If it's a downloaded song, we might find its remote URL in the library store
+                if (downloadedTrack?.downloadUrl && Array.isArray(downloadedTrack.downloadUrl) && downloadedTrack.downloadUrl.length > 0) {
+                    const remoteUrl = downloadedTrack.downloadUrl[downloadedTrack.downloadUrl.length - 1]?.url;
+                    if (remoteUrl && remoteUrl.startsWith('http')) {
+                        downloadUrl = remoteUrl;
+                    }
+                }
+            }
+
+            if (!downloadUrl || downloadUrl.startsWith('file://')) {
+                Alert.alert("Error", "No remote source found for this track. It cannot be downloaded.");
+                return;
+            }
+
             const downloadResumable = FileSystem.createDownloadResumable(
-                currentTrack.url,
+                downloadUrl,
                 fileUri,
                 {},
                 async (progressData: any) => {

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import TrackPlayer, {
     RepeatMode,
@@ -79,15 +80,45 @@ export const usePlayerStore = create<PlayerState>()(
             playTrack: async (trackData: any, queueData: any[] = [], quality: keyof typeof qualityMap = "320kbps") => {
                 const qualityIdx = qualityMap[quality];
                 const { shuffle } = get();
+                const { downloadedSongs } = require('./useLibraryStore').useLibraryStore.getState();
 
                 // Haptic feedback for interaction
                 try {
                     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 } catch (e) { }
 
+                // Check for local version of the track
+                const downloadedTrack = downloadedSongs.find((s: any) => s.id === String(trackData.id));
+                const isOffline = !(await jioSaavnService.checkConnection());
+
+                let trackUrl = trackData.downloadUrl ? (trackData.downloadUrl[qualityIdx]?.url || trackData.downloadUrl[trackData.downloadUrl.length - 1]?.url) : trackData.url;
+
+                // If we have a local copy, prioritize it
+                if (downloadedTrack?.localUri) {
+                    if (isOffline) {
+                        // Always use local URI if offline and present
+                        trackUrl = downloadedTrack.localUri;
+                    } else {
+                        try {
+                            const fileInfo = await FileSystem.getInfoAsync(downloadedTrack.localUri);
+                            if (fileInfo.exists) {
+                                trackUrl = downloadedTrack.localUri;
+                            } else {
+                                console.warn(`[Player]: Local file missing, falling back to network`);
+                                require('./useLibraryStore').useLibraryStore.getState().syncDownloadedSongs();
+                            }
+                        } catch (e) {
+                            console.error("[Player]: Error verifying local file", e);
+                            trackUrl = downloadedTrack.localUri; // Fallback to trying it anyway
+                        }
+                    }
+                } else if (isOffline && !trackUrl?.startsWith('file://')) {
+                    console.warn(`[Player]: Offline and no local file found for ${trackData.name}`);
+                }
+
                 const trackToPlay: Track = {
                     id: String(trackData.id),
-                    url: trackData.downloadUrl ? (trackData.downloadUrl[qualityIdx]?.url || trackData.downloadUrl[trackData.downloadUrl.length - 1].url) : trackData.url,
+                    url: trackUrl,
                     title: cleanMetadata(trackData.name || trackData.title, "Unknown Track"),
                     artist: cleanMetadata(trackData.artists?.primary?.[0]?.name || trackData.artist, "Unknown Artist"),
                     artwork: cleanMetadata(
@@ -99,23 +130,34 @@ export const usePlayerStore = create<PlayerState>()(
                     genre: cleanMetadata(trackData.language, "Music"),
                     ...(Number(trackData.duration) > 0 ? { duration: Number(trackData.duration) } : {}),
                     isLiveStream: false,
+                    // @ts-ignore
+                    originalDownloadUrl: trackData.downloadUrl,
+                    // @ts-ignore
+                    originalUrl: trackData.url
                 };
 
-                let queueToPlay: Track[] = queueData.map(item => ({
-                    id: String(item.id),
-                    url: item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
-                    title: cleanMetadata(item.name || item.title, "Unknown Track"),
-                    artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
-                    artwork: cleanMetadata(
-                        typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
-                        undefined
-                    ),
-                    album: cleanMetadata(item.album?.name || item.album, "Single"),
-                    description: cleanMetadata(item.name || item.title, "Unknown Track"),
-                    genre: cleanMetadata(item.language, "Music"),
-                    ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
-                    isLiveStream: false,
-                }));
+                let queueToPlay: Track[] = queueData.map(item => {
+                    const localItem = downloadedSongs.find((s: any) => s.id === String(item.id));
+                    return {
+                        id: String(item.id),
+                        url: localItem?.localUri || (item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1]?.url) : item.url),
+                        title: cleanMetadata(item.name || item.title, "Unknown Track"),
+                        artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
+                        artwork: cleanMetadata(
+                            typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
+                            undefined
+                        ),
+                        album: cleanMetadata(item.album?.name || item.album, "Single"),
+                        description: cleanMetadata(item.name || item.title, "Unknown Track"),
+                        genre: cleanMetadata(item.language, "Music"),
+                        ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
+                        isLiveStream: false,
+                        // @ts-ignore - Custom property to store remote metadata
+                        originalDownloadUrl: item.downloadUrl,
+                        // @ts-ignore - Custom property to store remote metadata
+                        originalUrl: item.url
+                    };
+                });
 
                 set({ originalQueue: [...queueToPlay], queue: [...queueToPlay] });
 
@@ -148,7 +190,7 @@ export const usePlayerStore = create<PlayerState>()(
                                 .filter((item: any) => !existingIds.has(item.id))
                                 .map((item: any) => ({
                                     id: String(item.id),
-                                    url: item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
+                                    url: item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1]?.url) : item.url,
                                     title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                     artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                     artwork: cleanMetadata(
@@ -160,6 +202,10 @@ export const usePlayerStore = create<PlayerState>()(
                                     genre: cleanMetadata(item.language, "Music"),
                                     ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
                                     isLiveStream: false,
+                                    // @ts-ignore
+                                    originalDownloadUrl: item.downloadUrl,
+                                    // @ts-ignore
+                                    originalUrl: item.url
                                 }));
 
                             if (recommendedTracks.length > 0) {
@@ -196,24 +242,24 @@ export const usePlayerStore = create<PlayerState>()(
                     // Reorder remaining queue
                     const currentIndex = await TrackPlayer.getActiveTrackIndex();
                     const currentQueue = await TrackPlayer.getQueue();
-                    
+
                     const before = currentQueue.slice(0, (currentIndex || 0) + 1);
                     const after = currentQueue.slice((currentIndex || 0) + 1);
-                    
+
                     // Shuffle only the upcoming tracks
                     const shuffledAfter = [...after].sort(() => Math.random() - 0.5);
-                    
+
                     await TrackPlayer.removeUpcomingTracks();
                     if (shuffledAfter.length > 0) {
                         await TrackPlayer.add(shuffledAfter);
                     }
-                    
+
                     set({ queue: [...before, ...shuffledAfter] });
                 } else {
                     // Revert to original order for upcoming tracks
                     const currentIndex = await TrackPlayer.getActiveTrackIndex() || 0;
                     const playingId = currentTrack?.id;
-                    
+
                     const originalIdx = originalQueue.findIndex(t => t.id === playingId);
                     if (originalIdx !== -1) {
                         const nextInOriginal = originalQueue.slice(originalIdx + 1);
@@ -221,7 +267,7 @@ export const usePlayerStore = create<PlayerState>()(
                         if (nextInOriginal.length > 0) {
                             await TrackPlayer.add(nextInOriginal);
                         }
-                        
+
                         const currentShown = queue.slice(0, currentIndex + 1);
                         set({ queue: [...currentShown, ...nextInOriginal] });
                     }
@@ -358,7 +404,7 @@ export const usePlayerStore = create<PlayerState>()(
                             .filter((item: any) => !existingIds.has(String(item.id)))
                             .map((item: any) => ({
                                 id: String(item.id),
-                                url: item.downloadUrl ? (item.downloadUrl[4]?.url || item.downloadUrl[item.downloadUrl.length - 1].url) : item.url,
+                                url: item.downloadUrl ? (item.downloadUrl[4]?.url || item.downloadUrl[item.downloadUrl.length - 1]?.url) : item.url,
                                 title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                 artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                 artwork: cleanMetadata(
@@ -370,6 +416,10 @@ export const usePlayerStore = create<PlayerState>()(
                                 genre: cleanMetadata(item.language, "Music"),
                                 ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
                                 isLiveStream: false,
+                                // @ts-ignore
+                                originalDownloadUrl: item.downloadUrl,
+                                // @ts-ignore
+                                originalUrl: item.url
                             }));
 
                         if (recommendedTracks.length > 0) {
