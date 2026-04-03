@@ -1,6 +1,7 @@
 import { useAuth } from '@/components/AuthContext';
 import GlassCard from '@/components/GlassCard';
 import { MusicImage } from '@/components/MusicImage';
+import { Shimmer } from '@/components/Shimmer';
 import SongMenu from '@/components/SongMenu';
 import { useHistoryStore } from '@/hooks/useHistoryStore';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
@@ -20,8 +21,10 @@ import {
   useSmartRecommendations,
   useTrending
 } from '@/hooks/useMusic';
+import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
+import * as Haptics from 'expo-haptics';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -39,6 +42,31 @@ const SectionHeader = memo(({ title, onSeeAll, isDark }: { title: string; onSeeA
         <Text className="text-emerald-500 font-medium">See all</Text>
       </TouchableOpacity>
     )}
+  </View>
+));
+
+const CardShimmer = memo(({ type, isDark }: { type: string; isDark: boolean }) => (
+  <View className="mr-5">
+    <View 
+      className={`${type === 'circle' ? 'w-24 h-24 rounded-full' : type === 'rectangle' ? 'w-[180px] h-[110px] rounded-xl' : 'w-[140px] h-36 rounded-2xl'} mb-2 ${isDark ? 'bg-zinc-900' : 'bg-slate-200'} overflow-hidden`}
+    >
+      <Shimmer width="100%" height="100%" />
+    </View>
+    <Shimmer width={type === 'circle' ? 80 : 100} height={16} borderRadius={4} className="mb-1" />
+    {type !== 'rectangle' && <Shimmer width={60} height={12} borderRadius={4} />}
+  </View>
+));
+
+const SectionShimmer = memo(({ title, isDark, type = 'square' }: { title: string; isDark: boolean; type?: string }) => (
+  <View className="mb-8">
+    <View className="px-5 mb-4">
+      <Shimmer width={150} height={24} borderRadius={4} />
+    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+      {[1, 2, 3, 4].map(i => (
+        <CardShimmer key={i} type={type} isDark={isDark} />
+      ))}
+    </ScrollView>
   </View>
 ));
 
@@ -131,11 +159,25 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { fetchLibrary, likedSongs = [] } = useLibraryStore();
-  const { theme } = useSettingsStore();
+  const { theme, audioQuality } = useSettingsStore();
+  const { playTrack } = usePlayerStore();
   const { recentlyPlayedItems = [], recentKeywords: searchHistory = [] } = useHistoryStore();
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
   const isDark = theme === 'dark';
+
+  const quickAccessData = useMemo(() => {
+    if (recentlyPlayedItems.length > 0) {
+        return recentlyPlayedItems.slice(0, 8);
+    }
+    // Fallback to top categories if no history
+    return [
+        { id: 'trending', name: 'Trending', type: 'category' },
+        { id: 'english', name: 'English', type: 'category' },
+        { id: 'hindi', name: 'Hindi', type: 'category' },
+        { id: 'telugu', name: 'Telugu', type: 'category' }
+    ];
+  }, [recentlyPlayedItems]);
 
   const handleSongPress = useCallback((id: string) => {
     router.push(`/song/${id}` as any);
@@ -232,25 +274,35 @@ export default function HomeScreen() {
 
   const allViewData = useMemo(() => [
     { type: 'quick_access', id: 'quick_access' },
-    { type: 'section', id: 'trending', title: 'Trending Now', data: trending },
-    { type: 'section', id: 'liked_recommendations', title: 'Recommended for You', data: likedRecommendations, enabled: likedRecommendations.length > 0 },
-    { type: 'section', id: 'new_releases', title: 'New Releases', data: newReleases },
-    { type: 'section', id: 'smart_recommendations', title: 'Based on your Search', data: smartRecommendations, enabled: smartRecommendations.length > 0 },
-    { type: 'section', id: 'artist_songs', title: 'Top Hits by DSP', data: artistSongs },
-    { type: 'section', id: 'featured_playlists', title: 'Popular Playlists', data: featuredPlaylists },
-    { type: 'section', id: 'movie_albums', title: 'New Movie Albums', data: movieAlbums },
-    { type: 'section', id: 'english_hits', title: 'English Pop Hits', data: englishHits },
-    { type: 'section', id: 'ar_rahman', title: 'A.R. Rahman Hits', data: arRahmanHits },
-    { type: 'section', id: 'taylor_swift', title: 'Taylor Swift Collection', data: taylorSwiftHits },
-    { type: 'section', id: 'romantic', title: 'Romantic Hits', data: romanticSongs },
-    { type: 'section', id: 'retro', title: 'Retro Classics', data: retroTelugu },
-    { type: 'section', id: 'happy', title: 'Happy Vibes', data: happySongs },
-    { type: 'section', id: 'singles', title: 'Latest Singles', data: singlesSongs },
+    { type: 'section', id: 'trending', title: 'Trending Now', data: trending, isLoading: trendingQuery.isLoading },
+    { type: 'section', id: 'liked_recommendations', title: 'Recommended for You', data: likedRecommendations, enabled: likedRecommendations.length > 0 || likedRecommendationsQuery.isLoading, isLoading: likedRecommendationsQuery.isLoading },
+    { type: 'section', id: 'new_releases', title: 'New Releases', data: newReleases, isLoading: newReleasesQuery.isLoading },
+    { type: 'section', id: 'smart_recommendations', title: 'Based on your Search', data: smartRecommendations, enabled: smartRecommendations.length > 0 || smartRecommendationsQuery.isLoading, isLoading: smartRecommendationsQuery.isLoading },
+    { type: 'section', id: 'artist_songs', title: 'Top Hits by DSP', data: artistSongs, isLoading: artistSongsQuery.isLoading },
+    { type: 'section', id: 'featured_playlists', title: 'Popular Playlists', data: featuredPlaylists, isLoading: featuredPlaylistsQuery.isLoading },
+    { type: 'section', id: 'movie_albums', title: 'New Movie Albums', data: movieAlbums, isLoading: movieAlbumsQuery.isLoading },
+    { type: 'section', id: 'english_hits', title: 'English Pop Hits', data: englishHits, isLoading: englishHitsQuery.isLoading },
+    { type: 'section', id: 'ar_rahman', title: 'A.R. Rahman Hits', data: arRahmanHits, isLoading: arRahmanHitsQuery.isLoading },
+    { type: 'section', id: 'taylor_swift', title: 'Taylor Swift Collection', data: taylorSwiftHits, isLoading: taylorSwiftHitsQuery.isLoading },
+    { type: 'section', id: 'romantic', title: 'Romantic Hits', data: romanticSongs, isLoading: romanticSongsQuery.isLoading },
+    { type: 'section', id: 'retro', title: 'Retro Classics', data: retroTelugu, isLoading: retroTeluguQuery.isLoading },
+    { type: 'section', id: 'happy', title: 'Happy Vibes', data: happySongs, isLoading: happySongsQuery.isLoading },
+    { type: 'section', id: 'singles', title: 'Latest Singles', data: singlesSongs, isLoading: singlesSongsQuery.isLoading },
   ].filter(s => s.enabled !== false), [
-    trending, likedRecommendations, newReleases, smartRecommendations,
-    artistSongs, featuredPlaylists, movieAlbums, englishHits,
-    arRahmanHits, taylorSwiftHits, romanticSongs, retroTelugu,
-    happySongs, singlesSongs
+    trending, trendingQuery.isLoading,
+    likedRecommendations, likedRecommendationsQuery.isLoading,
+    newReleases, newReleasesQuery.isLoading,
+    smartRecommendations, smartRecommendationsQuery.isLoading,
+    artistSongs, artistSongsQuery.isLoading,
+    featuredPlaylists, featuredPlaylistsQuery.isLoading,
+    movieAlbums, movieAlbumsQuery.isLoading,
+    englishHits, englishHitsQuery.isLoading,
+    arRahmanHits, arRahmanHitsQuery.isLoading,
+    taylorSwiftHits, taylorSwiftHitsQuery.isLoading,
+    romanticSongs, romanticSongsQuery.isLoading,
+    retroTelugu, retroTeluguQuery.isLoading,
+    happySongs, happySongsQuery.isLoading,
+    singlesSongs, singlesSongsQuery.isLoading
   ]);
 
   const HorizontalSection = memo(({ title, data, isDark, type = 'square' }: any) => (
@@ -264,7 +316,7 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <SongCard
             item={item}
-            onPress={() => item.type === 'album' || item.type === 'playlist' ? handleSearchPress(item.name || item.title) : handleSongPress(item.id)}
+            onPress={() => item.type === 'album' ? router.push(`/album/${item.id}` as any) : item.type === 'playlist' ? router.push(`/saavn-playlist/${item.id}` as any) : handleSongPress(item.id)}
             isDark={isDark}
             type={type}
           />
@@ -274,6 +326,33 @@ export default function HomeScreen() {
         maxToRenderPerBatch={4}
         removeClippedSubviews={true}
       />
+    </View>
+  ));
+
+  const QuickAccess = memo(() => (
+    <View className="flex-row flex-wrap justify-between mb-8">
+      {quickAccessData.map((item, index) => (
+        <TouchableOpacity
+          key={item.id}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            if (item.type === 'category') {
+                handleSearchPress(item.name);
+            } else {
+                playTrack(item, recentlyPlayedItems, audioQuality);
+            }
+          }}
+          className={`w-[48%] h-14 mb-3 rounded-lg flex-row items-center overflow-hidden ${isDark ? 'bg-zinc-900/40' : 'bg-slate-200/50'}`}
+        >
+          <MusicImage
+            images={item.image || item.artwork || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'M')}&background=random`}
+            className="w-14 h-14"
+          />
+          <Text className={`flex-1 px-3 py-1 font-bold text-[13px] ${isDark ? 'text-white' : 'text-slate-900'}`} numberOfLines={2}>
+            {item.name || item.title || "Unknown"}
+          </Text>
+        </TouchableOpacity>
+      ))}
     </View>
   ));
 
@@ -341,6 +420,9 @@ export default function HomeScreen() {
           </View>
         );
       case 'section':
+        if (item.isLoading) {
+          return <SectionShimmer title={item.title} isDark={isDark} type={item.id === 'movie_albums' || item.id === 'featured_playlists' ? 'rectangle' : 'square'} />;
+        }
         if (!item.data || item.data.length === 0) return null;
         return (
           <HorizontalSection

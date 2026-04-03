@@ -5,6 +5,7 @@ import SongMenu from '@/components/SongMenu';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
+import { DesignSystem } from '@/constants/DesignSystem';
 import { jioSaavnService } from '@/services/jiosaavn';
 import Slider from '@react-native-community/slider';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -325,10 +326,40 @@ export default function PlayerScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <View className="items-center shadow-2xl my-4">
+                <View className="items-center justify-center my-4 relative">
+                    {/* Aesthetic Pulsing Visualizer */}
+                    {isPlaying && (
+                        <>
+                            <MotiView
+                                from={{ scale: 0.8, opacity: 0.2 }}
+                                animate={{ scale: 1.2, opacity: 0.5 }}
+                                transition={{
+                                    type: 'timing',
+                                    duration: 2000,
+                                    loop: true,
+                                    repeatReverse: true,
+                                }}
+                                className="absolute w-full h-full rounded-full bg-emerald-500/20 shadow-2xl"
+                                style={{ width: width - 40, height: width - 40 }}
+                            />
+                            <MotiView
+                                from={{ scale: 0.9, opacity: 0.1 }}
+                                animate={{ scale: 1.4, opacity: 0.3 }}
+                                transition={{
+                                    type: 'timing',
+                                    duration: 3000,
+                                    loop: true,
+                                    repeatReverse: true,
+                                }}
+                                className="absolute w-full h-full rounded-full bg-emerald-400/10 shadow-2xl"
+                                style={{ width: width - 20, height: width - 20 }}
+                            />
+                        </>
+                    )}
+
                     <View
                         style={{ width: width - 64, height: width - 64 }}
-                        className="rounded-2xl overflow-hidden bg-zinc-900 shadow-2xl shadow-black/50"
+                        className="rounded-2xl overflow-hidden bg-zinc-900 shadow-2xl shadow-black/50 z-10"
                     >
                         <MusicImage
                             images={getImageUrl(currentTrack)}
@@ -357,7 +388,8 @@ export default function PlayerScreen() {
                             <Text className="text-gray-400 text-lg" numberOfLines={1}>{currentTrack.artist}</Text>
                         </View>
                         <View className="flex-row items-center">
-                            <TouchableOpacity onPress={() => {
+                            <TouchableOpacity onPress={async () => {
+                                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                 toggleLike(currentTrack as any, user?.id);
                             }}>
                                 <Heart size={28} color={isLiked(currentTrack.id) ? "#1DB954" : "#fff"} fill={isLiked(currentTrack.id) ? "#1DB954" : "transparent"} />
@@ -390,30 +422,39 @@ export default function PlayerScreen() {
                 </View>
 
                 <View className="flex-row justify-between items-center mt-10">
-                    <TouchableOpacity onPress={toggleShuffle}>
-                        <Shuffle size={24} color={shuffle ? "#1DB954" : "#fff"} />
+                    <TouchableOpacity onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        toggleShuffle();
+                    }}>
+                        <Shuffle size={24} color={shuffle ? DesignSystem.colors.primary : "#fff"} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleSkipPrev} disabled={isSkipping}>
                         <SkipBack size={36} color={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} fill={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} />
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={togglePlayback}
+                        onPress={async () => {
+                            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                            togglePlayback();
+                        }}
                         className="w-20 h-20 bg-white rounded-full items-center justify-center scale-110"
                     >
                         {isPlaying ? (
-                            <Pause size={40} color="#000" fill="#000" />
+                            <Pause size={40} color={DesignSystem.colors.background} fill={DesignSystem.colors.background} />
                         ) : (
-                            <Play size={40} color="#000" fill="#000" />
+                            <Play size={40} color={DesignSystem.colors.background} fill={DesignSystem.colors.background} />
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleSkipNext} disabled={isSkipping}>
                         <SkipForward size={36} color={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} fill={isSkipping ? "rgba(255,255,255,0.5)" : "#fff"} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={nextRepeatMode}>
+                    <TouchableOpacity onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        nextRepeatMode();
+                    }}>
                         {repeatMode === 'track' ? (
-                            <Repeat1 size={24} color="#1DB954" />
+                            <Repeat1 size={24} color={DesignSystem.colors.primary} />
                         ) : (
-                            <Repeat size={24} color={repeatMode === 'queue' ? "#1DB954" : "#fff"} />
+                            <Repeat size={24} color={repeatMode === 'queue' ? DesignSystem.colors.primary : "#fff"} />
                         )}
                     </TouchableOpacity>
                 </View>
@@ -426,10 +467,18 @@ export default function PlayerScreen() {
                         <Plus size={24} color="#fff" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleDownload}>
-                        <Download size={24} color={downloadProgress !== null ? "#1DB954" : "#fff"} />
+                        <Download size={24} color={downloadProgress !== null ? DesignSystem.colors.primary : "#fff"} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setIsSleepTimerModalVisible(true)}>
-                        <Clock size={24} color={sleepTimer ? "#1DB954" : "#fff"} />
+                    <TouchableOpacity 
+                        onPress={() => setIsSleepTimerModalVisible(true)}
+                        className="items-center"
+                    >
+                        <Clock size={24} color={sleepTimer ? DesignSystem.colors.primary : "#fff"} />
+                        {sleepTimer && (
+                            <Text className="text-[9px] text-emerald-500 font-bold absolute -bottom-4">
+                                {formatTime(remainingTime || 0)}
+                            </Text>
+                        )}
                     </TouchableOpacity>
                 </View>
             </View>

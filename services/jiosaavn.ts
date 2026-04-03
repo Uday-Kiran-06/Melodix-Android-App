@@ -1,24 +1,51 @@
 import { SearchResponse, Song } from "../types/music";
+import { decodeHtml, sanitizeImageUrl } from "../utils/stringUtils";
 
 const PRIMARY_BASE_URL = process.env.EXPO_PUBLIC_SAAVN_API || "https://saavn.sumit.co/api";
-const SECONDARY_BASE_URL = "https://jiosaavn-api-beta.vercel.app/api"; // Added Beta fallback
-const ENGLISH_BASE_URL = "https://jiosaavn-api-cyan-theta.vercel.app/api";
+const SECONDARY_BASE_URL = "https://jio-saavn-api.vercel.app/api"; // Keep as secondary fallback
+const ENGLISH_BASE_URL = "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Corrected link
 
 // Simple in-memory cache
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
+const DEFAULT_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+};
+
+const fetchWithTimeout = async (url: string, options: any = {}, timeout: number = 8000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                ...DEFAULT_HEADERS,
+                ...options.headers,
+            },
+            signal: controller.signal,
+        });
+        clearTimeout(id);
+        return response;
+    } catch (error: any) {
+        clearTimeout(id);
+        if (error.name === 'AbortError') {
+            throw new Error(`Request timed out for ${url}`);
+        }
+        throw error;
+    }
+};
+
 export const jioSaavnService = {
     checkConnection: async (): Promise<boolean> => {
         try {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 3000);
-            const response = await fetch("https://www.google.com", {
+            const response = await fetchWithTimeout("https://www.google.com", {
                 method: "HEAD",
                 mode: "no-cors",
-                signal: controller.signal,
-            });
-            clearTimeout(id);
+            }, 3000);
             return response.ok || response.type === 'opaque';
         } catch (e) {
             return false;
@@ -36,93 +63,21 @@ export const jioSaavnService = {
         return /^[\x00-\x7F\u00C0-\u00FF]*$/.test(query);
     },
 
+    /**
+     * Decodes HTML entities and performs custom cleanup for Melodix
+     */
     decodeHtml: (text: string): string => {
         if (!text) return "";
-        return text
-            .replace(/&quot;/g, '"')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&#039;/g, "'")
-            .replace(/&nbsp;/g, " ")
+        return decodeHtml(text)
             .replace(/\(From.*?\)/g, "") // Remove "(From ...)" text
             .trim();
     },
 
-    sanitizeImageUrl: (images: any, quality: '50x50' | '150x150' | '500x500' = '500x500'): string | null => {
-        if (!images) return null;
-
-        let url = "";
-        try {
-            if (Array.isArray(images) && images.length > 0) {
-                // Find the requested quality, or fallback to the best available without forcing regex replacement
-                const match = images.find(img => img && typeof img === 'object' && img.quality === quality);
-                const secondBest = images.find(img => img && typeof img === 'object' && img.quality === '150x150');
-
-                const bestObj = match || secondBest || images[images.length - 1];
-
-                if (bestObj && typeof bestObj === 'object') {
-                    url = bestObj.url || bestObj.uri || "";
-                } else if (typeof bestObj === 'string') {
-                    url = bestObj;
-                }
-            } else if (typeof images === 'object' && images !== null) {
-                // If it's a single Saavn image object with quality field
-                if (images.quality && images.url) {
-                    url = images.url;
-                } else {
-                    // Prioritize actual image fields over 'url' (which is often the webpage link on full objects)
-                    const possibleUrl = images.image || images.artwork || images.images || images.uri || images.url;
-                    if (typeof possibleUrl === 'string') {
-                        url = possibleUrl;
-                    } else if (possibleUrl) {
-                        // Recurse if it's an array or another object
-                        return jioSaavnService.sanitizeImageUrl(possibleUrl, quality);
-                    }
-                }
-            } else if (typeof images === 'string') {
-                url = images;
-            }
-        } catch (e) {
-            return null;
-        }
-
-        // Defensive checks for malformed "URLs"
-        if (!url || typeof url !== 'string' || url.trim() === "" || url === "null" || url === "undefined") return null;
-
-        // Block HTML content that might be returned in error response strings
-        if (url.startsWith('<!doctype') || url.startsWith('<html') || url.includes('<title>')) return null;
-
-        // Ensure it looks like a URL
-        if (!url.startsWith('http') && !url.startsWith('file') && !url.startsWith('data:')) return null;
-
-        // Ensure HTTPS
-        let sanitized = url.replace("http://", "https://");
-
-        // Block webpage URLs that are mistakenly returned as images
-        if (sanitized.includes('jiosaavn.com/song/') ||
-            sanitized.includes('jiosaavn.com/album/') ||
-            sanitized.includes('jiosaavn.com/featured/')) {
-            return null;
-        }
-
-        // ONLY force 500x500 for standard Saavn CDN links that are explicitly low-res
-        // This avoids breaking editorial or older images that don't have 500x500 versions
-        if (sanitized.includes('c.saavncdn.com')) {
-            if (sanitized.includes('150x150') || sanitized.includes('50x50')) {
-                // We only do this for songs/albums which usually have it, but we should be careful.
-                // Let's only do it if the quality requested is 500x500.
-                if (quality === '500x500') {
-                    sanitized = sanitized.replace(/150x150/g, "500x500").replace(/50x50/g, "500x500");
-                }
-            }
-        }
-
-        if (sanitized.includes('default_album.png') || sanitized.includes('default_artist.png')) {
-            return null;
-        }
-
-        return sanitized;
+    /**
+     * Sanitizes image URLs using shared utility
+     */
+    sanitizeImageUrl: (images: any, _quality: string = '500x500'): string | null => {
+        return sanitizeImageUrl(images);
     },
 
     searchSongs: async (query: string, languages: string = "english,hindi,telugu", page: number = 1, limit: number = 20): Promise<Song[]> => {
@@ -139,8 +94,7 @@ export const jioSaavnService = {
                 try {
                     const fullUrl = `${baseUrl}/search/songs?query=${encodeURIComponent(query)}&language=${languages}&page=${page}&limit=${limit}`;
                     console.log(`[API Request]: Fetching ${fullUrl}`);
-                    console.log(`[Diagnostic]: Current System Time: ${new Date().toISOString()}`);
-                    const response = await fetch(fullUrl);
+                    const response = await fetchWithTimeout(fullUrl);
                     if (response.ok) {
                         const data: SearchResponse = await response.json();
                         const results = data?.data?.results || [];
@@ -160,18 +114,15 @@ export const jioSaavnService = {
                                 }
                             }));
                         }
+                    } else {
+                        console.warn(`[API Response Error] Provider ${baseUrl} returned status: ${response.status}`);
                     }
                 } catch (e: any) {
-                    console.error(`[API Error Detail] Provider ${baseUrl} failed:`, {
-                        message: e.message,
-                        name: e.name,
-                        stack: e.stack,
-                        cause: e.cause
-                    });
+                    console.error(`[API Connection Failure] Provider ${baseUrl}:`, e.message);
                     lastError = e;
                 }
             }
-            if (lastError) console.error("Search API failed across all providers:", lastError);
+            if (lastError) console.error("Search API failed across all providers. Check your internet or provider status.");
             return [];
         } catch (error) {
             console.error("Search API failed:", error);
@@ -191,11 +142,10 @@ export const jioSaavnService = {
             let allResults: any[] = [];
             const uniqueUrls = [...new Set(baseUrls)];
 
-            // Try at most 2 different providers to balance speed and coverage
-            for (const baseUrl of uniqueUrls.slice(0, 2)) {
+            for (const baseUrl of uniqueUrls) {
                 try {
                     const fullUrl = `${baseUrl}/search/albums?query=${encodeURIComponent(query)}&language=${languages}`;
-                    const response = await fetch(fullUrl);
+                    const response = await fetchWithTimeout(fullUrl);
                     if (response.ok) {
                         const data = await response.json();
                         const results = data?.data?.results || [];
@@ -217,7 +167,7 @@ export const jioSaavnService = {
                         }
                     }
                 } catch (e: any) {
-                    console.error(`[API Error Detail] Search failed for ${baseUrl}:`, e.message);
+                    console.error(`[API Error] searchAlbums on ${baseUrl}:`, e.message);
                 }
             }
             return jioSaavnService.deduplicateItems(allResults);
@@ -238,10 +188,10 @@ export const jioSaavnService = {
             let allResults: any[] = [];
             const uniqueUrls = [...new Set(baseUrls)];
 
-            for (const baseUrl of uniqueUrls.slice(0, 2)) {
+            for (const baseUrl of uniqueUrls) {
                 try {
                     const fullUrl = `${baseUrl}/search/playlists?query=${encodeURIComponent(query)}&language=${languages}`;
-                    const response = await fetch(fullUrl);
+                    const response = await fetchWithTimeout(fullUrl);
                     if (response.ok) {
                         const data = await response.json();
                         const results = data?.data?.results || [];
@@ -254,7 +204,9 @@ export const jioSaavnService = {
                             allResults = [...allResults, ...formatted];
                         }
                     }
-                } catch (e) { }
+                } catch (e: any) {
+                    console.error(`[API Error] searchPlaylists on ${baseUrl}:`, e.message);
+                }
             }
             return jioSaavnService.deduplicateItems(allResults);
         } catch (error) {
@@ -309,7 +261,7 @@ export const jioSaavnService = {
 
             for (const url of endpoints) {
                 try {
-                    const response = await fetch(url);
+                    const response = await fetchWithTimeout(url);
                     if (response.ok) {
                         const data = await response.json();
                         // Handle different response structures
@@ -322,15 +274,14 @@ export const jioSaavnService = {
                             }));
                         }
                     }
-                } catch (e) {
-                    // Continue to next endpoint
-                }
+                } catch (e) { }
             }
             throw new Error("All trending endpoints failed");
         } catch (error) {
             // Silently fallback to search to keep the UI populated without polluting terminal
             try {
-                const fallbackResponse = await fetch(`${PRIMARY_BASE_URL}/search/songs?query=latest telugu songs 2024&limit=50`);
+                const fallbackUrl = `${PRIMARY_BASE_URL}/search/songs?query=latest telugu songs 2024&limit=50`;
+                const fallbackResponse = await fetchWithTimeout(fallbackUrl);
                 if (!fallbackResponse.ok) return [];
                 const fallbackData: SearchResponse = await fallbackResponse.json();
                 return (fallbackData?.data?.results || []).map((s: any) => ({
@@ -355,7 +306,7 @@ export const jioSaavnService = {
 
             for (const url of endpoints) {
                 try {
-                    const response = await fetch(url);
+                    const response = await fetchWithTimeout(url);
                     if (response.ok) {
                         const data: { success: boolean; data: Song[] } = await response.json();
                         const song = data?.data?.[0];
@@ -396,7 +347,7 @@ export const jioSaavnService = {
 
             for (const url of endpoints) {
                 try {
-                    const response = await fetch(url);
+                    const response = await fetchWithTimeout(url);
                     if (response.ok) {
                         const data: { success: boolean; data: Song[] } = await response.json();
                         const songs = data?.data || [];
@@ -414,7 +365,6 @@ export const jioSaavnService = {
                                     }))
                                 }
                             }));
-                            // Optionally cache these individually
                             results.forEach(song => {
                                 cache.set(`song_${song.id}`, { data: song, timestamp: Date.now() });
                             });
@@ -439,7 +389,7 @@ export const jioSaavnService = {
             const endpoints = [`${PRIMARY_BASE_URL}/albums?id=${id}`, `${ENGLISH_BASE_URL}/albums?id=${id}`];
             for (const url of endpoints) {
                 try {
-                    const response = await fetch(url);
+                    const response = await fetchWithTimeout(url);
                     if (response.ok) {
                         const data = await response.json();
                         if (data?.data) {
@@ -475,7 +425,7 @@ export const jioSaavnService = {
             const endpoints = [`${PRIMARY_BASE_URL}/playlists?id=${id}`, `${ENGLISH_BASE_URL}/playlists?id=${id}`];
             for (const url of endpoints) {
                 try {
-                    const response = await fetch(url);
+                    const response = await fetchWithTimeout(url);
                     if (response.ok) {
                         const data = await response.json();
                         if (data?.data) {
@@ -508,7 +458,7 @@ export const jioSaavnService = {
             const endpoints = [`${ENGLISH_BASE_URL}/artists?id=${artistId}`, `${PRIMARY_BASE_URL}/artists?id=${artistId}`];
             for (const url of endpoints) {
                 try {
-                    const response = await fetch(url);
+                    const response = await fetchWithTimeout(url);
                     if (response.ok) {
                         const data = await response.json();
                         const songs = data?.data?.topSongs || [];
@@ -533,7 +483,7 @@ export const jioSaavnService = {
             const baseUrls = [ENGLISH_BASE_URL, PRIMARY_BASE_URL];
             for (const baseUrl of baseUrls) {
                 try {
-                    const suggestionResponse = await fetch(`${baseUrl}/songs/${songId}/suggestions`);
+                    const suggestionResponse = await fetchWithTimeout(`${baseUrl}/songs/${songId}/suggestions`);
                     if (suggestionResponse.ok) {
                         const data = await suggestionResponse.json();
                         if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
@@ -545,7 +495,7 @@ export const jioSaavnService = {
                         }
                     }
 
-                    const recommendationResponse = await fetch(`${baseUrl}/songs/${songId}/recommendations`);
+                    const recommendationResponse = await fetchWithTimeout(`${baseUrl}/songs/${songId}/recommendations`);
                     if (recommendationResponse.ok) {
                         const data = await recommendationResponse.json();
                         if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
@@ -613,7 +563,7 @@ export const jioSaavnService = {
 
     getModules: async (languages: string = "telugu,hindi,english") => {
         try {
-            const response = await fetch(`${PRIMARY_BASE_URL}/modules?language=${languages}`);
+            const response = await fetchWithTimeout(`${PRIMARY_BASE_URL}/modules?language=${languages}`);
             if (!response.ok) return null;
             const data = await response.json();
             return data?.data;
@@ -624,12 +574,9 @@ export const jioSaavnService = {
 
     checkConnectivity: async () => {
         try {
-            console.log("[Connectivity Test]: Testing reachability to google.com...");
-            const response = await fetch("https://www.google.com", { method: 'HEAD' });
-            console.log(`[Connectivity Test]: Google.com status: ${response.status} (${response.ok ? 'OK' : 'FAILED'})`);
+            const response = await fetchWithTimeout("https://www.google.com", { method: 'HEAD' }, 3000);
             return response.ok;
         } catch (e) {
-            console.error("[Connectivity Test]: Failed to reach google.com:", e);
             return false;
         }
     },

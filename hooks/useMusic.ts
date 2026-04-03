@@ -1,10 +1,12 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { jioSaavnService } from '../services/jiosaavn';
+import { useHistoryStore } from './useHistoryStore';
 
 export const useInfiniteSongs = (query: string) => {
+    const getPreferredLanguages = useHistoryStore(state => state.getPreferredLanguages);
     return useInfiniteQuery({
-        queryKey: ['infinite-songs', query],
-        queryFn: ({ pageParam = 1 }) => jioSaavnService.searchSongs(query, 'english,hindi,telugu', pageParam),
+        queryKey: ['infinite-songs', query, getPreferredLanguages()],
+        queryFn: ({ pageParam = 1 }) => jioSaavnService.searchSongs(query, getPreferredLanguages(), pageParam),
         getNextPageParam: (lastPage, allPages) => lastPage.length > 0 ? allPages.length + 1 : undefined,
         initialPageParam: 1,
         enabled: !!query,
@@ -34,26 +36,29 @@ export const useTrending = () => {
 };
 
 export const useSearch = (query: string) => {
+    const getPreferredLanguages = useHistoryStore(state => state.getPreferredLanguages);
     return useQuery({
-        queryKey: ['search', query],
-        queryFn: () => jioSaavnService.searchSongs(query),
+        queryKey: ['search', query, getPreferredLanguages()],
+        queryFn: () => jioSaavnService.searchSongs(query, getPreferredLanguages()),
         enabled: !!query,
         staleTime: 1000 * 60 * 2, // Shorter stale time for search
     });
 };
 
 export const useSearchAlbums = (query: string) => {
+    const getPreferredLanguages = useHistoryStore(state => state.getPreferredLanguages);
     return useQuery({
-        queryKey: ['search-albums', query],
-        queryFn: () => jioSaavnService.searchAlbums(query),
+        queryKey: ['search-albums', query, getPreferredLanguages()],
+        queryFn: () => jioSaavnService.searchAlbums(query, getPreferredLanguages()),
         enabled: !!query
     });
 };
 
 export const useSearchPlaylists = (query: string) => {
+    const getPreferredLanguages = useHistoryStore(state => state.getPreferredLanguages);
     return useQuery({
-        queryKey: ['search-playlists', query],
-        queryFn: () => jioSaavnService.searchPlaylists(query),
+        queryKey: ['search-playlists', query, getPreferredLanguages()],
+        queryFn: () => jioSaavnService.searchPlaylists(query, getPreferredLanguages()),
         enabled: !!query
     });
 };

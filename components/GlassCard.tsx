@@ -7,18 +7,21 @@ interface GlassCardProps {
     style?: ViewStyle;
     intensity?: number;
     tint?: 'light' | 'dark' | 'default';
+    className?: string;
 }
 
-const GlassCard: React.FC<GlassCardProps> = ({ children, style, intensity = 40, tint = 'dark' }) => {
+const GlassCard: React.FC<GlassCardProps> = ({ children, style, intensity = 40, tint = 'dark', className }) => {
     return (
-        <View style={[styles.container, style]}>
-            <BlurView
-                intensity={intensity}
-                style={styles.blur}
-                tint={tint}
-            >
-                {children}
-            </BlurView>
+        <View style={style} className={className}>
+            <View style={styles.container}>
+                <BlurView
+                    intensity={intensity}
+                    style={styles.blur}
+                    tint={tint}
+                >
+                    {children}
+                </BlurView>
+            </View>
         </View>
     );
 };

@@ -1,4 +1,3 @@
-import MiniPlayer from '@/components/MiniPlayer';
 import { Tabs } from 'expo-router';
 import { Home, Library, Search, Settings } from 'lucide-react-native';
 import React from 'react';
@@ -54,7 +53,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-      <MiniPlayer />
     </View>
   );
 }

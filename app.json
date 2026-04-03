@@ -71,7 +71,22 @@
         }
       ],
       "expo-media-library",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "MelodixWidget",
+              "label": "Melodix Music Player",
+              "minWidth": "250dp",
+              "minHeight": "160dp",
+              "description": "Control playback and access your favorite playlists from your home screen.",
+              "previewImage": "./assets/images/icon.png"
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

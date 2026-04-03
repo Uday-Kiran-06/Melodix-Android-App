@@ -1,5 +1,6 @@
+import { DesignSystem } from '@/constants/DesignSystem';
 import { jioSaavnService } from '@/services/jiosaavn';
-import { Image } from 'expo-image';
+import { Image, ImageTransition } from 'expo-image';
 import React, { memo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -20,7 +21,7 @@ export const MusicImage = memo(({
     className,
     style,
     contentFit = 'cover',
-    transition = 100,
+    transition = 300, // Smoother default transition
     placeholder = DEFAULT_IMAGE,
     blurRadius
 }: MusicImageProps) => {
@@ -44,7 +45,7 @@ export const MusicImage = memo(({
                 style={StyleSheet.absoluteFill}
                 contentFit={contentFit}
                 transition={transition}
-                cachePolicy="memory-disk"
+                cachePolicy="disk" // Prioritize disk caching for high-res artwork
                 placeholder={placeholder}
                 blurRadius={blurRadius}
                 onLoad={() => {
@@ -67,6 +68,6 @@ export const MusicImage = memo(({
 const styles = StyleSheet.create({
     container: {
         overflow: 'hidden',
-        backgroundColor: '#18181b', // zinc-900
+        backgroundColor: DesignSystem.colors.surfaceLight,
     },
 });

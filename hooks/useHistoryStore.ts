@@ -7,6 +7,8 @@ interface HistoryState {
     recentlyPlayedTracks: any[];
     recentlyPlayedItems: any[];
     searchHistory: string[];
+    languagePreferences: Record<string, number>;
+    getPreferredLanguages: () => string;
     addTrackToHistory: (track: any) => void;
     addItemToHistory: (item: any) => void;
     addSearchQuery: (query: string) => void;
@@ -24,6 +26,17 @@ export const useHistoryStore = create<HistoryState>()(
             recentlyPlayedTracks: [], // Keeping for backward compatibility
             recentlyPlayedItems: [],
             searchHistory: [],
+            languagePreferences: {},
+            getPreferredLanguages: () => {
+                const { languagePreferences } = get();
+                // Filter out falsy/undefined keys and empty strings
+                const validLangs = Object.entries(languagePreferences).filter(([k]) => k && k.trim() !== '' && k !== 'undefined');
+                const sortedLangs = validLangs
+                    .sort(([, countA], [, countB]) => countB - countA)
+                    .map(([lang]) => lang);
+                const defaults = ['telugu', 'hindi', 'english'];
+                return Array.from(new Set([...sortedLangs, ...defaults])).join(',');
+            },
             addTrackToHistory: (track) => {
                 get().addItemToHistory(track);
             },
@@ -32,8 +45,10 @@ export const useHistoryStore = create<HistoryState>()(
                 const { recentKeywords, recentlyPlayedItems } = get();
                 const keyword = item.artist || item.artists?.primary?.[0]?.name;
 
+                const itemWithTimestamp = { ...item, playedAt: Date.now() };
+
                 // Combined History (Tracks + Playlists/Albums)
-                const newItems = [item, ...recentlyPlayedItems.filter(i => i.id !== item.id)].slice(0, 20);
+                const newItems = [itemWithTimestamp, ...recentlyPlayedItems.filter(i => i.id !== item.id)].slice(0, 20);
 
                 // Keyword History
                 let newKeywords = recentKeywords;
@@ -41,9 +56,19 @@ export const useHistoryStore = create<HistoryState>()(
                     newKeywords = [keyword, ...recentKeywords.filter(k => k !== keyword)].slice(0, 5);
                 }
 
+                // Language Preferences
+                const newLanguagePreferences = { ...(get().languagePreferences || {}) };
+                if (item.language) {
+                    const lang = item.language.toLowerCase().trim();
+                    if (lang) {
+                        newLanguagePreferences[lang] = (newLanguagePreferences[lang] || 0) + 1;
+                    }
+                }
+
                 set({
                     recentlyPlayedItems: newItems,
                     recentKeywords: newKeywords,
+                    languagePreferences: newLanguagePreferences,
                     // Also sync back to recentlyPlayedTracks for existing UI that still uses it
                     recentlyPlayedTracks: newItems.filter(i => i.type === 'song' || !i.type).slice(0, 10)
                 });

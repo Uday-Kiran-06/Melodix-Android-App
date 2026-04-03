@@ -22,6 +22,13 @@ export default function PlaylistScreen() {
         playTrack(song, playlist?.songs?.map((s: any) => s.song_data) || [], audioQuality);
     }, [playTrack, playlist, audioQuality]);
 
+    const handlePlayAll = useCallback(() => {
+        const songs = playlist?.songs?.map((s: any) => s.song_data) || [];
+        if (songs.length > 0) {
+            playTrack(songs[0], songs, audioQuality);
+        }
+    }, [playTrack, playlist, audioQuality]);
+
     const handleRemoveSong = useCallback((songId: string) => {
         if (playlist) removeSongFromPlaylist(songId, playlist.id);
     }, [removeSongFromPlaylist, playlist]);
@@ -50,6 +57,18 @@ export default function PlaylistScreen() {
                     <Text className="text-gray-400 text-sm">{songs.length} songs</Text>
                 </View>
             </View>
+
+            {songs.length > 0 && (
+                <View className="px-4 mb-4">
+                    <TouchableOpacity 
+                        onPress={handlePlayAll}
+                        className="bg-emerald-500 w-full py-3 rounded-full flex-row justify-center items-center"
+                    >
+                        <Play fill="#000" color="#000" size={20} />
+                        <Text className="text-black font-bold text-lg ml-2">Play All</Text>
+                     </TouchableOpacity>
+                </View>
+            )}
 
             {songs.length === 0 ? (
                 <View className="items-center py-20">

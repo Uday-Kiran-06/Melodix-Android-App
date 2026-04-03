@@ -1,7 +1,12 @@
 import { Buffer } from 'buffer';
+import MiniPlayer from '@/components/MiniPlayer';
 if (!global.Buffer) {
   global.Buffer = Buffer;
 }
+
+import { registerWidgetTaskHandler } from 'react-native-android-widget';
+import { widgetTaskHandler } from '../widget/WidgetTaskHandler';
+registerWidgetTaskHandler(widgetTaskHandler);
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -272,6 +277,7 @@ function RootLayoutNav({ loaded }: { loaded: boolean }) {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider value={navigationTheme}>
             <InitialLayout loaded={loaded} />
+            <MiniPlayer />
           </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

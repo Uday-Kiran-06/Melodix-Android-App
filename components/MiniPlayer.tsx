@@ -1,13 +1,17 @@
 import { MusicImage } from '@/components/MusicImage';
+import * as Haptics from 'expo-haptics';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { jioSaavnService } from '@/services/jiosaavn';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments, usePathname } from 'expo-router';
 import { Pause, Play } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import React, { memo } from 'react';
 import { Dimensions, Text, TouchableOpacity, View } from 'react-native';
 import { useProgress } from 'react-native-track-player';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DesignSystem } from '@/constants/DesignSystem';
+import { useSettingsStore } from '@/hooks/useSettingsStore';
+import { StyleSheet } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -47,46 +51,79 @@ const getImageUrl = (track: any) => {
 
 export default memo(function MiniPlayer() {
     const { currentTrack, isPlaying, togglePlayback } = usePlayerStore();
+    const { theme } = useSettingsStore();
     const { position, duration } = useProgress(1000);
     const router = useRouter();
+    const segments = useSegments();
+    const pathname = usePathname();
     const insets = useSafeAreaInsets();
+    const isDark = theme === 'dark';
 
-    if (!currentTrack) return null;
+    // Check if we are in the tabs layout
+    const isInTabs = segments[0] === '(tabs)';
+    // Hide mini player on the main player screen
+    const isPlayerScreen = pathname === '/player';
+
+    if (!currentTrack || isPlayerScreen) return null;
 
     return (
-        <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => router.push('/player')}
-            className="absolute left-0 right-0 h-16 shadow-2xl overflow-hidden"
-            style={{ backgroundColor: '#000', bottom: 50 + insets.bottom }}
+        <MotiView
+            from={{ scale: 1, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className={`absolute left-0 right-0 h-[60px] shadow-2xl border-t ${isDark ? 'border-white/10' : 'border-zinc-200'} overflow-hidden`}
+            style={{ 
+                backgroundColor: isDark ? DesignSystem.colors.surface : '#fff', 
+                bottom: (isInTabs ? 50 : 0) + insets.bottom,
+                zIndex: 100
+            }}
         >
-            {/* Dynamic Artwork Background */}
-            <MusicImage
-                images={currentTrack.artwork || currentTrack.image}
-                className="absolute w-full h-full opacity-40"
-                blurRadius={100}
-                transition={500}
-            />
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
+            <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push('/player');
+                }}
+                className="flex-1"
+            >
+                {/* Opaque Blurred Artwork Background (Premium Look) */}
                 <MusicImage
                     images={currentTrack.artwork || currentTrack.image}
-                    className="w-11 h-11 rounded-md overflow-hidden bg-zinc-900"
+                    className="absolute w-full h-full"
+                    blurRadius={100}
+                    transition={500}
                 />
-                <View className="flex-1 ml-4 justify-center">
-                    <MarqueeText
-                        text={currentTrack.title || ""}
-                        className="text-white font-bold text-sm"
+                {/* Subtle Overlay to ensure text legibility */}
+                <View 
+                    className={`absolute w-full h-full ${isDark ? 'bg-black/40' : 'bg-white/40'}`} 
+                />
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
+                    <MusicImage
+                        images={currentTrack.artwork || currentTrack.image}
+                        className="w-11 h-11 rounded-md overflow-hidden bg-zinc-900"
                     />
-                    <Text className="text-gray-400 text-xs" numberOfLines={1}>{currentTrack.artist || "Unknown Artist"}</Text>
-                </View>
-                <View className="flex-row items-center">
-                    <TouchableOpacity onPress={togglePlayback} className="p-2 ml-2">
-                        {isPlaying ? (
-                            <Pause size={28} color="#fff" fill="#fff" />
-                        ) : (
-                            <Play size={28} color="#fff" fill="#fff" />
-                        )}
-                    </TouchableOpacity>
+                    <View className="flex-1 ml-4 justify-center">
+                        <MarqueeText
+                            text={currentTrack.title || ""}
+                            className={`${isDark ? 'text-white' : 'text-slate-900'} font-bold text-sm`}
+                        />
+                        <Text className="text-zinc-500 text-xs" numberOfLines={1}>{currentTrack.artist || "Unknown Artist"}</Text>
+                    </View>
+                    <View className="flex-row items-center">
+                        <TouchableOpacity 
+                            onPress={async () => {
+                                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                                togglePlayback();
+                            }} 
+                            className="p-2 ml-2"
+                        >
+                            {isPlaying ? (
+                                <Pause size={28} color={isDark ? "#fff" : "#000"} fill={isDark ? "#fff" : "#000"} />
+                            ) : (
+                                <Play size={28} color={isDark ? "#fff" : "#000"} fill={isDark ? "#fff" : "#000"} />
+                            )}
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Progressive Progress Bar */}
@@ -96,7 +133,7 @@ export default memo(function MiniPlayer() {
                         style={{ width: `${(position / (duration || 1)) * 100}%` }}
                     />
                 </View>
-            </View>
-        </TouchableOpacity>
+            </TouchableOpacity>
+        </MotiView>
     );
 });

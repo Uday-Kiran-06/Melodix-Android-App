@@ -1,7 +1,10 @@
 import { MotiView } from 'moti';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
-import { Heart, ListPlus, X } from 'lucide-react-native';
+import { Heart, ListPlus, X, User, Disc, Share2 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View, Dimensions } from 'react-native';
@@ -54,6 +57,7 @@ interface SongMenuComponent extends React.FC<SongMenuProps> {
 
 const SongMenu: SongMenuComponent = ({ isVisible, onClose, song, userId, extraActions }: SongMenuProps) => {
     const { toggleLike, isLiked } = useLibraryStore();
+    const router = useRouter();
 
     if (!song) return null;
 
@@ -123,6 +127,45 @@ const SongMenu: SongMenuComponent = ({ isVisible, onClose, song, userId, extraAc
                             label="Add or Remove from Playlist"
                             onPress={() => {
                                 // Logic for playlist
+                            }}
+                        />
+
+                        {song.album?.id && (
+                            <MenuItem 
+                                icon={Disc}
+                                label="View Album"
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    onClose();
+                                    router.push(`/album/${song.album.id}`);
+                                }}
+                            />
+                        )}
+
+                        {song.artists?.primary?.[0]?.id && (
+                            <MenuItem 
+                                icon={User}
+                                label="View Artist"
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    onClose();
+                                    // router.push(`/artist/${song.artists.primary[0].id}`); // implementation for artist screen if available
+                                    // For now, let's use search as a fallback if artist screen isn't ready
+                                    router.push({ pathname: '/search', params: { q: songArtist } });
+                                }}
+                            />
+                        )}
+
+                        <MenuItem 
+                            icon={Share2}
+                            label="Share Song"
+                            onPress={async () => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                try {
+                                    const shareUrl = song.url || `https://www.jiosaavn.com/song/${songTitle}/${song.id}`;
+                                    await Sharing.shareAsync(shareUrl);
+                                } catch (e) {}
+                                onClose();
                             }}
                         />
 
