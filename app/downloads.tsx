@@ -116,18 +116,13 @@ export default function DownloadsScreen() {
     return (
         <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
             <Stack.Screen options={{
-                headerShown: true,
-                title: "Downloads",
-                headerTransparent: true,
-                headerTintColor: isDark ? '#fff' : '#000',
-                headerLeft: () => (
-                    <TouchableOpacity onPress={() => router.back()} className="ml-4 p-2 bg-zinc-800/50 rounded-full">
-                        <ChevronLeft size={24} color="#fff" />
-                    </TouchableOpacity>
-                )
+                headerShown: false,
             }} />
 
-            <View className="flex-1 pt-24 px-4">
+            <View className="flex-1 pt-12 px-4">
+                <TouchableOpacity onPress={() => router.back()} className="mb-6 p-2 w-12 h-12 bg-zinc-800/50 rounded-full items-center justify-center">
+                    <ChevronLeft size={28} color="#fff" />
+                </TouchableOpacity>
                 <Text className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-2`}>Downloads</Text>
                 <Text className="text-zinc-500 mb-6">{downloadedSongs.length} songs saved offline</Text>
 

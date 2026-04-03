@@ -176,7 +176,7 @@ export default function SongDetailsScreen() {
 
     return (
         <View className="flex-1 bg-black">
-            <Stack.Screen options={{ title: song?.name || "Details", headerTitle: song?.name || "Details" }} />
+            <Stack.Screen options={{ headerShown: false, title: song?.name || "Details" }} />
             
             {loading ? (
                 <View className="flex-1 items-center justify-center">

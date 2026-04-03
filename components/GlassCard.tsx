@@ -28,12 +28,14 @@ const GlassCard: React.FC<GlassCardProps> = ({ children, style, intensity = 40, 
 
 const styles = StyleSheet.create({
     container: {
+        flex: 1,
         borderRadius: 24,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     blur: {
+        flex: 1,
         padding: 16,
     },
 });

@@ -9,6 +9,7 @@ import TrackPlayer, {
 import { create } from "zustand";
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { jioSaavnService } from "../services/jiosaavn";
+import { LrcLine, lyricsService } from "../services/lyrics";
 
 interface PlayerState {
     currentTrack: Track | null;
@@ -19,6 +20,9 @@ interface PlayerState {
     originalQueue: Track[];
     sleepTimer: number | null; // minutes
     remainingTime: number | null; // seconds
+    syncedLyrics: LrcLine[] | null;
+    plainLyrics: string | null;
+    isLoadingLyrics: boolean;
     setCurrentTrack: (track: Track | null) => void;
     setIsPlaying: (playing: boolean) => void;
     setShuffle: (shuffle: boolean) => void;
@@ -34,6 +38,7 @@ interface PlayerState {
     initPlayer: () => Promise<void>;
     loadRecommendations: (songId: string) => Promise<void>;
     isLoadingRecommendations: boolean;
+    loadLyrics: (track: Track) => Promise<void>;
 }
 
 // Map quality selection to JioSaavn API download link keys
@@ -67,6 +72,9 @@ export const usePlayerStore = create<PlayerState>()(
             sleepTimer: null,
             remainingTime: null,
             isLoadingRecommendations: false,
+            syncedLyrics: null,
+            plainLyrics: null,
+            isLoadingLyrics: false,
             setCurrentTrack: (track) => set({ currentTrack: track }),
             setIsPlaying: (playing) => set({ isPlaying: playing }),
             setShuffle: (shuffle) => set({ shuffle }),
@@ -115,6 +123,8 @@ export const usePlayerStore = create<PlayerState>()(
                 } else if (isOffline && !trackUrl?.startsWith('file://')) {
                     console.warn(`[Player]: Offline and no local file found for ${trackData.name}`);
                 }
+
+                set({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
 
                 const trackToPlay: Track = {
                     id: String(trackData.id),
@@ -434,6 +444,23 @@ export const usePlayerStore = create<PlayerState>()(
                     console.error("Failed to load recommendations:", e);
                 } finally {
                     set({ isLoadingRecommendations: false });
+                }
+            },
+
+            loadLyrics: async (track: Track) => {
+                const { isLoadingLyrics } = get();
+                if (isLoadingLyrics || !track) return;
+
+                set({ isLoadingLyrics: true });
+                try {
+                    const { synced, plain } = await lyricsService.getSyncedLyrics(track);
+                    // Use JioSaavn as fallback for plain text if LrcLib didn't provide any
+                    const fallbackPlain = plain || await jioSaavnService.getLyrics(track.id);
+                    set({ syncedLyrics: synced, plainLyrics: fallbackPlain });
+                } catch (e) {
+                    console.error("Failed to load lyrics:", e);
+                } finally {
+                    set({ isLoadingLyrics: false });
                 }
             },
         }),

@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
+import { LyricsView } from '@/components/LyricsView';
 import {
     ChevronDown,
     Clock,
@@ -22,6 +23,7 @@ import {
     ListMinus,
     ListMusic,
     ListPlus,
+    Mic2,
     MoreVertical,
     Pause,
     Play,
@@ -35,7 +37,7 @@ import {
 } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import React, { useCallback, useState } from 'react';
-import { Alert, Dimensions, FlatList, Modal, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, FlatList, Modal, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import TrackPlayer, { useProgress } from 'react-native-track-player';
 
 Notifications.setNotificationHandler({
@@ -47,7 +49,7 @@ Notifications.setNotificationHandler({
     }),
 });
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const MarqueeText = ({ text, style, className }: { text: string; style?: any; className?: string }) => {
     const textWidth = (text?.length || 0) * 10; // Rough estimate
@@ -84,11 +86,10 @@ const getImageUrl = (track: any) => {
 };
 
 export default function PlayerScreen() {
-    const {
-        currentTrack, isPlaying, togglePlayback,
+    const { currentTrack, isPlaying, togglePlayback,
         shuffle, repeatMode, toggleShuffle, nextRepeatMode,
         addToQueue, removeFromQueue, isInQueue, queue,
-        sleepTimer, remainingTime, setSleepTimer
+        sleepTimer, remainingTime, setSleepTimer, syncedLyrics
     } = usePlayerStore();
     const { toggleLike, isLiked } = useLibraryStore();
     const { user } = useAuth();
@@ -99,10 +100,11 @@ export default function PlayerScreen() {
     const [isSleepTimerModalVisible, setIsSleepTimerModalVisible] = React.useState(false);
     const [isQueueVisible, setIsQueueVisible] = React.useState(false);
     const [isMenuVisible, setIsMenuVisible] = React.useState(false);
-    const { position, duration } = useProgress(1000);
+    const { position, duration } = useProgress(100);
     const [isDragging, setIsDragging] = React.useState(false);
     const [dragPosition, setDragPosition] = React.useState(0);
     const [downloadProgress, setDownloadProgress] = React.useState<number | null>(null);
+    const scrollViewRef = React.useRef<ScrollView>(null);
 
     const handleDownload = async () => {
         if (!currentTrack || !currentTrack.url) return;
@@ -298,6 +300,15 @@ export default function PlayerScreen() {
     const currentPos = isDragging ? dragPosition : position;
     const progress = (currentPos / (duration || 1)) * 100;
 
+    // Find active lyric line for preview
+    const activeLyricLine = React.useMemo(() => {
+        if (!syncedLyrics || syncedLyrics.length === 0) return null;
+        return syncedLyrics.find((line, i) => {
+            const nextLine = syncedLyrics[i + 1];
+            return position >= line.time && (!nextLine || position < nextLine.time);
+        });
+    }, [position, syncedLyrics]);
+
     return (
         <View className="flex-1 bg-black">
             <MusicImage
@@ -312,7 +323,13 @@ export default function PlayerScreen() {
                 className="absolute w-full h-full"
             />
 
-            <View className="flex-1 px-8 justify-center pb-8">
+            <ScrollView 
+                ref={scrollViewRef}
+                className="flex-1" 
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 50 }}
+            >
+                <View className="flex-1 px-8 justify-center pb-8" style={{ minHeight: height }}>
                 <View className="flex-row justify-between items-center mb-12">
                     <TouchableOpacity onPress={() => router.back()}>
                         <ChevronDown size={32} color="#fff" />
@@ -396,6 +413,20 @@ export default function PlayerScreen() {
                             </TouchableOpacity>
                         </View>
                     </View>
+                    
+                    {/* Active Lyric Preview */}
+                    {activeLyricLine && (
+                        <MotiView
+                            from={{ opacity: 0, translateY: 10 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            key={activeLyricLine.time}
+                            className="mt-2"
+                        >
+                            <Text className="text-emerald-400 font-medium text-lg italic" numberOfLines={1}>
+                                {activeLyricLine.text}
+                            </Text>
+                        </MotiView>
+                    )}
                 </View>
 
                 {/* Real-time Progress Bar */}
@@ -481,7 +512,10 @@ export default function PlayerScreen() {
                         )}
                     </TouchableOpacity>
                 </View>
-            </View>
+                </View>
+
+                <LyricsView scrollViewRef={scrollViewRef} />
+            </ScrollView>
 
             <PlaylistModal
                 isVisible={isPlaylistModalVisible}
@@ -650,6 +684,8 @@ export default function PlayerScreen() {
                     />
                 </View>
             </Modal>
+            
+            {/* Integrated Lyrics View */}
         </View>
     );
 }

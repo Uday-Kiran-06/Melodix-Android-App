@@ -572,6 +572,23 @@ export const jioSaavnService = {
         }
     },
 
+    getLyrics: async (songId: string): Promise<string | null> => {
+        try {
+            // Using JioSaavn's internal internal API for lyrics
+            // Note: songId should be the numerical ID from the API response
+            const url = `https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&ctx=web6dot0&_format=json&_marker=0&song_id=${songId}`;
+            const response = await fetchWithTimeout(url);
+            if (response.ok) {
+                const data = await response.json();
+                return data.lyrics || null;
+            }
+            return null;
+        } catch (e) {
+            console.error("[jioSaavnService]: getLyrics failed", e);
+            return null;
+        }
+    },
+
     checkConnectivity: async () => {
         try {
             const response = await fetchWithTimeout("https://www.google.com", { method: 'HEAD' }, 3000);
