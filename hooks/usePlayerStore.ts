@@ -26,6 +26,7 @@ interface PlayerState {
     syncedLyrics: LrcLine[] | null;
     plainLyrics: string | null;
     isLoadingLyrics: boolean;
+    isRehydrated: boolean;
     setCurrentTrack: (track: Track | null) => void;
     setIsPlaying: (playing: boolean) => void;
     setShuffle: (shuffle: boolean) => void;
@@ -93,6 +94,7 @@ export const usePlayerStore = create<PlayerState>()(
             syncedLyrics: null,
             plainLyrics: null,
             isLoadingLyrics: false,
+            isRehydrated: false,
             setCurrentTrack: (track) => set({ currentTrack: track }),
             setIsPlaying: (playing) => set({ isPlaying: playing }),
             setShuffle: (shuffle) => set({ shuffle }),
@@ -402,8 +404,15 @@ export const usePlayerStore = create<PlayerState>()(
                 if (!currentTrack) return;
 
                 try {
-                    await TrackPlayer.getState();
+                    const state = await TrackPlayer.getState();
                 } catch (e) {
+                    console.log("[Player]: TrackPlayer setup not ready during init");
+                    return;
+                }
+
+                // If not rehydrated yet, wait or return
+                if (!get().isRehydrated) {
+                    console.log("[Player]: Waiting for store rehydration...");
                     return;
                 }
 
@@ -472,9 +481,15 @@ export const usePlayerStore = create<PlayerState>()(
             },
 
             loadLyrics: async (track: Track) => {
-                const { isLoadingLyrics } = get();
-                if (isLoadingLyrics || !track) return;
-
+                if (!track) return;
+                
+                const { isLoadingLyrics, syncedLyrics, currentTrack } = get();
+                
+                // If we already have synced lyrics for this exact track ID, skip
+                if (syncedLyrics && syncedLyrics.length > 0 && currentTrack?.id === track.id) {
+                    return;
+                }
+                
                 set({ isLoadingLyrics: true });
                 try {
                     const { synced, plain } = await lyricsService.getSyncedLyrics(track);
@@ -482,7 +497,7 @@ export const usePlayerStore = create<PlayerState>()(
                     const fallbackPlain = plain || await jioSaavnService.getLyrics(track.id);
                     set({ syncedLyrics: synced, plainLyrics: fallbackPlain });
                 } catch (e) {
-                    console.error("Failed to load lyrics:", e);
+                    console.error("[Player]: Failed to load lyrics:", e);
                 } finally {
                     set({ isLoadingLyrics: false });
                 }
@@ -498,6 +513,15 @@ export const usePlayerStore = create<PlayerState>()(
                 shuffle: state.shuffle,
                 repeatMode: state.repeatMode,
             }),
+            onRehydrateStorage: (state) => {
+                return (rehydratedState, error) => {
+                    if (!error && rehydratedState) {
+                        usePlayerStore.setState({ isRehydrated: true });
+                        // Re-trigger initPlayer to restore session once data is ready
+                        rehydratedState.initPlayer();
+                    }
+                };
+            },
         }
     )
 );

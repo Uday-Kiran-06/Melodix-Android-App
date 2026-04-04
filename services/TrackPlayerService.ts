@@ -53,13 +53,15 @@ export const PlaybackService = async function () {
         
         if (event.track !== undefined && event.track !== null) {
             // Prevent duplicate triggers for the same track ID
-            if (lastTrackId === event.track.id) return;
+            const isNewTrack = lastTrackId !== event.track.id;
             lastTrackId = event.track.id;
 
             store.setCurrentTrack(event.track);
-            // Reset and load lyrics state for the new track
-            usePlayerStore.setState({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
-            store.loadLyrics(event.track);
+            // Reset and load lyrics state for the new track ONLY if needed
+            if (isNewTrack || !store.syncedLyrics || !store.plainLyrics) {
+                usePlayerStore.setState({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
+                store.loadLyrics(event.track);
+            }
 
             // Load more recommendations if we're nearing the end of the queue
             const index = event.index;

@@ -1,9 +1,10 @@
 import { SearchResponse, Song } from "../types/music";
 import { decodeHtml, sanitizeImageUrl } from "../utils/stringUtils";
 
-const PRIMARY_BASE_URL = process.env.EXPO_PUBLIC_SAAVN_API || "https://saavn.sumit.co/api";
-const SECONDARY_BASE_URL = "https://jio-saavn-api.vercel.app/api"; // Keep as secondary fallback
-const ENGLISH_BASE_URL = "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Corrected link
+const PRIMARY_BASE_URL = process.env.EXPO_PUBLIC_SAAVN_API || "https://saavn.dev/api"; // Updated to stable dev instance
+const SECONDARY_BASE_URL = "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Currently verified working
+const INTERNATIONAL_BASE_URL = "https://jio-saavn-api.vercel.app/api"; // English/International specialist
+const FALLBACK_BASE_URL = "https://saavn.revanced.dev/api"; // Extra fallback layer
 
 // Simple in-memory cache
 const cache = new Map<string, { data: any; timestamp: number }>();
@@ -15,7 +16,7 @@ const DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
 };
 
-const fetchWithTimeout = async (url: string, options: any = {}, timeout: number = 8000) => {
+const fetchWithTimeout = async (url: string, options: any = {}, timeout: number = 10000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     
@@ -32,10 +33,31 @@ const fetchWithTimeout = async (url: string, options: any = {}, timeout: number 
         return response;
     } catch (error: any) {
         clearTimeout(id);
+        
+        // Handle RangeError: status 0 by wrapping it in a standard Error
+        if (error.message?.includes('status (0)') || error.name === 'RangeError') {
+            throw new Error(`Network failure (Status 0): ${url}`);
+        }
+        
         if (error.name === 'AbortError') {
             throw new Error(`Request timed out for ${url}`);
         }
         throw error;
+    }
+};
+
+const safeParseJson = async (response: Response) => {
+    const text = await response.text();
+    if (!text || text.trim() === "") {
+        throw new Error("Empty response body");
+    }
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        if (text.includes('<html>') || text.includes('DOCTYPE html')) {
+            throw new Error("Provider returned HTML error page instead of JSON");
+        }
+        throw new Error(`Invalid JSON format: ${text.substring(0, 50)}...`);
     }
 };
 
@@ -83,10 +105,10 @@ export const jioSaavnService = {
     searchSongs: async (query: string, languages: string = "english,hindi,telugu", page: number = 1, limit: number = 20): Promise<Song[]> => {
         try {
             const baseUrls = [
-                jioSaavnService.isInternationalQuery(query) ? ENGLISH_BASE_URL : PRIMARY_BASE_URL,
+                jioSaavnService.isInternationalQuery(query) ? INTERNATIONAL_BASE_URL : PRIMARY_BASE_URL,
                 SECONDARY_BASE_URL,
                 PRIMARY_BASE_URL,
-                ENGLISH_BASE_URL
+                INTERNATIONAL_BASE_URL
             ];
 
             let lastError;
@@ -96,7 +118,7 @@ export const jioSaavnService = {
                     console.log(`[API Request]: Fetching ${fullUrl}`);
                     const response = await fetchWithTimeout(fullUrl);
                     if (response.ok) {
-                        const data: SearchResponse = await response.json();
+                        const data: SearchResponse = await safeParseJson(response);
                         const results = data?.data?.results || [];
                         if (results.length > 0) {
                             const deduplicatedResults = jioSaavnService.deduplicateSongs(results);
@@ -133,10 +155,10 @@ export const jioSaavnService = {
     searchAlbums: async (query: string, languages: string = "english,hindi,telugu") => {
         try {
             const baseUrls = [
-                jioSaavnService.isInternationalQuery(query) ? ENGLISH_BASE_URL : PRIMARY_BASE_URL,
+                jioSaavnService.isInternationalQuery(query) ? INTERNATIONAL_BASE_URL : PRIMARY_BASE_URL,
                 SECONDARY_BASE_URL,
                 PRIMARY_BASE_URL,
-                ENGLISH_BASE_URL
+                INTERNATIONAL_BASE_URL
             ];
 
             let allResults: any[] = [];
@@ -147,7 +169,7 @@ export const jioSaavnService = {
                     const fullUrl = `${baseUrl}/search/albums?query=${encodeURIComponent(query)}&language=${languages}`;
                     const response = await fetchWithTimeout(fullUrl);
                     if (response.ok) {
-                        const data = await response.json();
+                        const data = await safeParseJson(response);
                         const results = data?.data?.results || [];
                         if (results.length > 0) {
                             const formatted = results.map((album: any) => ({
@@ -179,10 +201,10 @@ export const jioSaavnService = {
     searchPlaylists: async (query: string, languages: string = "english,hindi,telugu") => {
         try {
             const baseUrls = [
-                jioSaavnService.isInternationalQuery(query) ? ENGLISH_BASE_URL : PRIMARY_BASE_URL,
+                jioSaavnService.isInternationalQuery(query) ? INTERNATIONAL_BASE_URL : PRIMARY_BASE_URL,
                 SECONDARY_BASE_URL,
                 PRIMARY_BASE_URL,
-                ENGLISH_BASE_URL
+                INTERNATIONAL_BASE_URL
             ];
 
             let allResults: any[] = [];
@@ -193,7 +215,7 @@ export const jioSaavnService = {
                     const fullUrl = `${baseUrl}/search/playlists?query=${encodeURIComponent(query)}&language=${languages}`;
                     const response = await fetchWithTimeout(fullUrl);
                     if (response.ok) {
-                        const data = await response.json();
+                        const data = await safeParseJson(response);
                         const results = data?.data?.results || [];
                         if (results.length > 0) {
                             const formatted = results.map((playlist: any) => ({
@@ -263,7 +285,7 @@ export const jioSaavnService = {
                 try {
                     const response = await fetchWithTimeout(url);
                     if (response.ok) {
-                        const data = await response.json();
+                        const data = await safeParseJson(response);
                         // Handle different response structures
                         const songs = data?.data?.songs || data?.data?.trending?.songs || [];
                         if (songs.length > 0) {
@@ -302,13 +324,13 @@ export const jioSaavnService = {
 
         try {
             // Try English API first as it often has better metadata for international tracks
-            const endpoints = [`${ENGLISH_BASE_URL}/songs?ids=${id}`, `${PRIMARY_BASE_URL}/songs?ids=${id}`];
+            const endpoints = [`${INTERNATIONAL_BASE_URL}/songs?ids=${id}`, `${PRIMARY_BASE_URL}/songs?ids=${id}`];
 
             for (const url of endpoints) {
                 try {
                     const response = await fetchWithTimeout(url);
                     if (response.ok) {
-                        const data: { success: boolean; data: Song[] } = await response.json();
+                        const data: { success: boolean; data: Song[] } = await safeParseJson(response);
                         const song = data?.data?.[0];
                         if (song) {
                             const result = {
@@ -343,13 +365,13 @@ export const jioSaavnService = {
         try {
             const idString = ids.join(',');
             // Primary and secondary endpoints
-            const endpoints = [`${PRIMARY_BASE_URL}/songs?ids=${idString}`, `${ENGLISH_BASE_URL}/songs?ids=${idString}`];
+            const endpoints = [`${PRIMARY_BASE_URL}/songs?ids=${idString}`, `${INTERNATIONAL_BASE_URL}/songs?ids=${idString}`];
 
             for (const url of endpoints) {
                 try {
                     const response = await fetchWithTimeout(url);
                     if (response.ok) {
-                        const data: { success: boolean; data: Song[] } = await response.json();
+                        const data: { success: boolean; data: Song[] } = await safeParseJson(response);
                         const songs = data?.data || [];
                         if (songs.length > 0) {
                             const results = songs.map(song => ({
@@ -386,12 +408,12 @@ export const jioSaavnService = {
         if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
 
         try {
-            const endpoints = [`${PRIMARY_BASE_URL}/albums?id=${id}`, `${ENGLISH_BASE_URL}/albums?id=${id}`];
+            const endpoints = [`${PRIMARY_BASE_URL}/albums?id=${id}`, `${INTERNATIONAL_BASE_URL}/albums?id=${id}`];
             for (const url of endpoints) {
                 try {
                     const response = await fetchWithTimeout(url);
                     if (response.ok) {
-                        const data = await response.json();
+                        const data = await safeParseJson(response);
                         if (data?.data) {
                             const album = {
                                 ...data.data,
@@ -422,12 +444,12 @@ export const jioSaavnService = {
         if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
 
         try {
-            const endpoints = [`${PRIMARY_BASE_URL}/playlists?id=${id}`, `${ENGLISH_BASE_URL}/playlists?id=${id}`];
+            const endpoints = [`${PRIMARY_BASE_URL}/playlists?id=${id}`, `${INTERNATIONAL_BASE_URL}/playlists?id=${id}`];
             for (const url of endpoints) {
                 try {
                     const response = await fetchWithTimeout(url);
                     if (response.ok) {
-                        const data = await response.json();
+                        const data = await safeParseJson(response);
                         if (data?.data) {
                             const playlist = {
                                 ...data.data,
@@ -455,12 +477,12 @@ export const jioSaavnService = {
     getArtistSongs: async (artistId: string): Promise<Song[]> => {
         try {
             // Try English API for possibly better artist catalog
-            const endpoints = [`${ENGLISH_BASE_URL}/artists?id=${artistId}`, `${PRIMARY_BASE_URL}/artists?id=${artistId}`];
+            const endpoints = [`${INTERNATIONAL_BASE_URL}/artists?id=${artistId}`, `${PRIMARY_BASE_URL}/artists?id=${artistId}`];
             for (const url of endpoints) {
                 try {
                     const response = await fetchWithTimeout(url);
                     if (response.ok) {
-                        const data = await response.json();
+                        const data = await safeParseJson(response);
                         const songs = data?.data?.topSongs || [];
                         if (songs.length > 0) {
                             return songs.map((song: Song) => ({
@@ -480,7 +502,7 @@ export const jioSaavnService = {
 
     getRecommendations: async (songId: string): Promise<Song[]> => {
         try {
-            const baseUrls = [ENGLISH_BASE_URL, PRIMARY_BASE_URL];
+            const baseUrls = [INTERNATIONAL_BASE_URL, PRIMARY_BASE_URL];
             for (const baseUrl of baseUrls) {
                 try {
                     const suggestionResponse = await fetchWithTimeout(`${baseUrl}/songs/${songId}/suggestions`);
@@ -565,7 +587,7 @@ export const jioSaavnService = {
         try {
             const response = await fetchWithTimeout(`${PRIMARY_BASE_URL}/modules?language=${languages}`);
             if (!response.ok) return null;
-            const data = await response.json();
+            const data = await safeParseJson(response);
             return data?.data;
         } catch (e) {
             return null;

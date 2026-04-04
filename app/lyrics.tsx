@@ -28,6 +28,7 @@ export default function FullLyricsScreen() {
     const { currentTrack, syncedLyrics, plainLyrics, isLoadingLyrics } = usePlayerStore();
     const { position } = useProgress(100);
     const [activeIndex, setActiveIndex] = useState(-1);
+    const [containerHeight, setContainerHeight] = useState(height);
     const flatListRef = useRef<FlatList>(null);
     const router = useRouter();
 
@@ -101,14 +102,15 @@ export default function FullLyricsScreen() {
                         ref={flatListRef}
                         data={syncedLyrics}
                         keyExtractor={(_, i) => i.toString()}
-                        ListHeaderComponent={() => <View style={{ height: height * 0.5 }} />}
-                        ListFooterComponent={() => <View style={{ height: height * 0.5 }} />}
+                        onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+                        ListHeaderComponent={() => <View style={{ height: containerHeight / 2 - 55 }} />}
+                        ListFooterComponent={() => <View style={{ height: containerHeight / 2 - 55 }} />}
                         contentContainerStyle={{ paddingHorizontal: 32 }}
                         showsVerticalScrollIndicator={false}
                         initialNumToRender={20}
                         getItemLayout={(_, index) => ({
-                            length: 100,
-                            offset: 100 * index + (height * 0.5),
+                            length: 110,
+                            offset: 110 * index + (containerHeight / 2 - 55),
                             index,
                         })}
                         renderItem={({ item, index }) => {
@@ -117,7 +119,7 @@ export default function FullLyricsScreen() {
                                 <TouchableOpacity
                                     onPress={() => handleSeek(item.time)}
                                     activeOpacity={0.7}
-                                    style={{ minHeight: 80, justifyContent: 'center', marginVertical: 10 }}
+                                    style={{ height: 100, justifyContent: 'center', marginVertical: 5 }}
                                 >
                                     <MotiView
                                         animate={{
@@ -127,9 +129,12 @@ export default function FullLyricsScreen() {
                                         transition={{ type: 'timing', duration: 300 }}
                                     >
                                         <Text
-                                            className="text-3xl font-bold leading-relaxed"
+                                            className="text-3xl font-bold"
+                                            numberOfLines={3}
+                                            adjustsFontSizeToFit
                                             style={{
                                                 color: isActive ? '#fff' : '#ccc',
+                                                lineHeight: 38,
                                                 textShadowColor: isActive ? 'rgba(0,0,0,0.6)' : 'transparent',
                                                 textShadowOffset: { width: 0, height: 2 },
                                                 textShadowRadius: 6,

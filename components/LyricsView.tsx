@@ -55,8 +55,13 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
             // Reset active index and measurements for new track
             setActiveIndex(-1);
             lineHeights.current = {};
+            
+            // Proactively load lyrics if missing (helps with app restart restoration)
+            if (!syncedLyrics && !plainLyrics && !isLoadingLyrics) {
+                loadLyrics(currentTrack);
+            }
         }
-    }, [currentTrack?.id]);
+    }, [currentTrack?.id, syncedLyrics, plainLyrics, isLoadingLyrics]);
 
     useEffect(() => {
         if (!syncedLyrics || syncedLyrics.length === 0) return;

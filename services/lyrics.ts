@@ -25,14 +25,22 @@ export const lyricsService = {
             });
 
             if (response.ok) {
-                const data = await response.json();
-                
-                if (data.syncedLyrics) {
-                    const parsed = lyricsService.parseLrc(data.syncedLyrics);
-                    return { synced: parsed, plain: data.plainLyrics || null };
+                const text = await response.text();
+                if (!text || text.trim() === "") {
+                    return { synced: null, plain: null };
                 }
                 
-                return { synced: null, plain: data.plainLyrics || null };
+                try {
+                    const data = JSON.parse(text);
+                    if (data.syncedLyrics) {
+                        const parsed = lyricsService.parseLrc(data.syncedLyrics);
+                        return { synced: parsed, plain: data.plainLyrics || null };
+                    }
+                    return { synced: null, plain: data.plainLyrics || null };
+                } catch (e) {
+                    console.warn("[lyricsService]: Invalid JSON from LrcLib", e);
+                    return { synced: null, plain: null };
+                }
             }
             
             return { synced: null, plain: null };
