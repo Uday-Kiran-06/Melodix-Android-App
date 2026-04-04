@@ -127,7 +127,7 @@ export default function SearchScreen() {
   const primaryColor = DesignSystem.colors.primary;
 
   const handleSongPress = useCallback((item: any, results: any[] | undefined) => {
-    playTrack(item, results || [], audioQuality);
+    playTrack(item, results || []);
   }, [playTrack, audioQuality]);
 
   const handleToggleLike = useCallback((item: any) => {

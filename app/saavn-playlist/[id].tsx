@@ -53,12 +53,12 @@ export default function SaavnPlaylistScreen() {
     }, [id]);
 
     const handlePlaySong = useCallback((song: any) => {
-        playTrack(song, playlist?.songs || [], audioQuality);
+        playTrack(song, playlist?.songs || []);
     }, [playTrack, playlist, audioQuality]);
 
     const handlePlayAll = useCallback(() => {
         if (playlist?.songs && playlist.songs.length > 0) {
-            playTrack(playlist.songs[0], playlist.songs, audioQuality);
+            playTrack(playlist.songs[0], playlist.songs);
         }
     }, [playTrack, playlist, audioQuality]);
 

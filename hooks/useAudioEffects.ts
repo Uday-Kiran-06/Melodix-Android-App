@@ -20,16 +20,18 @@ export const useAudioEffects = () => {
     const isPlaying = playbackState.state === State.Playing;
     const isTransitioning = useRef(false);
 
-    // Scan for audio session ID when playback starts
+    // Scan for audio session ID when playback starts, but ONLY if any effect is enabled
+    const anyEffectEnabled = isBassBoostEnabled || isEqEnabled || isLoudnessEnabled;
+    
     useEffect(() => {
-        if (isPlaying) {
+        if (isPlaying && anyEffectEnabled) {
             // Small delay to ensure the player has started and registered with the system
             const timer = setTimeout(() => {
                 AudioEffects.scanForSession();
             }, 1000);
             return () => clearTimeout(timer);
         }
-    }, [isPlaying]);
+    }, [isPlaying, anyEffectEnabled]);
 
     // Audio Effect Sync (Existing)
     useEffect(() => {

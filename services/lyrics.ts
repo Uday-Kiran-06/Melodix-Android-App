@@ -51,8 +51,8 @@ export const lyricsService = {
         
         const lines = lrcString.split('\n');
         const parsed: LrcLine[] = [];
-        // Support [mm:ss], [mm:ss.xx], [mm:ss:xx]
-        const timeRegex = /\[(\d{2}):(\d{2})[.:]?(\d{2,3})?\]/g;
+        // Support [mm:ss], [mm:ss.x], [mm:ss.xx], [mm:ss.xxx]
+        const timeRegex = /\[(\d{2}):(\d{2})[.:]?(\d{1,3})?\]/g;
 
         lines.forEach(line => {
             let match;
@@ -60,10 +60,13 @@ export const lyricsService = {
             while ((match = timeRegex.exec(line)) !== null) {
                 const minutes = parseInt(match[1]);
                 const seconds = parseInt(match[2]);
-                const milliseconds = match[3] ? parseInt(match[3]) : 0;
+                const millisecondsStr = match[3] || "0";
+                const milliseconds = parseInt(millisecondsStr);
                 
-                // Convert to total seconds
-                const time = minutes * 60 + seconds + (milliseconds / (match[3]?.length === 3 ? 1000 : 100));
+                // Convert to total seconds: 
+                // .1 = 0.1s, .01 = 0.01s, .001 = 0.001s
+                const fraction = milliseconds / Math.pow(10, millisecondsStr.length);
+                const time = minutes * 60 + seconds + fraction;
                 
                 // Clean the text by removing ALL [tags] from the line
                 const text = line.replace(/\[[^\]]*\]/g, '').trim();

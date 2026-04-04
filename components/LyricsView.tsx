@@ -31,7 +31,7 @@ interface LyricsViewProps {
 
 export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
     const { currentTrack, syncedLyrics, plainLyrics, isLoadingLyrics, loadLyrics } = usePlayerStore();
-    const { position } = useProgress(100); // Faster polling for better sync
+    const { position } = useProgress(100); // Fast polling for precise sync
     const [activeIndex, setActiveIndex] = useState(-1);
     const lyricsContainerRef = useRef<View>(null);
     const internalScrollViewRef = useRef<ScrollView>(null);
@@ -39,20 +39,30 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
     const [scrollViewHeight, setScrollViewHeight] = useState(0);
     const [containerY, setContainerY] = useState(0);
     const router = useRouter();
+    const lastLoadedTrackId = useRef<string | null>(null);
 
     const boxSize = width - 48;
+    // Reserve space for the header (icon + title + margin)
+    const headerHeight = 52;
+    // Reserve space for footer attribution
+    const footerHeight = 30;
+    // Available height for lyrics content inside the box
+    const lyricsContentHeight = boxSize - headerHeight - footerHeight - 32; // 32 = GlassCard padding
 
     useEffect(() => {
-        if (currentTrack && !syncedLyrics && !plainLyrics && !isLoadingLyrics) {
-            loadLyrics(currentTrack);
+        if (currentTrack && currentTrack.id !== lastLoadedTrackId.current) {
+            lastLoadedTrackId.current = currentTrack.id;
+            // Reset active index and measurements for new track
+            setActiveIndex(-1);
+            lineHeights.current = {};
         }
-    }, [currentTrack]);
+    }, [currentTrack?.id]);
 
     useEffect(() => {
-        if (!syncedLyrics || syncedLyrics.length === 0 || scrollViewHeight === 0) return;
+        if (!syncedLyrics || syncedLyrics.length === 0) return;
 
         // Find the current line based on position
-        let index = syncedLyrics.findIndex((line, i) => {
+        const index = syncedLyrics.findIndex((line, i) => {
             const nextLine = syncedLyrics[i + 1];
             return position >= line.time && (!nextLine || position < nextLine.time);
         });
@@ -63,21 +73,20 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
             // Calculate INTERNAL scroll position to center the current line
             let offset = 0;
             for (let i = 0; i < index; i++) {
-                offset += lineHeights.current[i] || 70;
+                offset += lineHeights.current[i] || 55;
             }
 
-            // Center at 40% of the box height to allow more space for the upcoming line below
-            const currentLineHeight = lineHeights.current[index] || 70;
-            const targetInternalY = offset + (currentLineHeight / 2) + (scrollViewHeight * 0.1);
+            const currentLineHeight = lineHeights.current[index] || 55;
+            // Scroll to the cumulative offset + half of the current line's height
+            // to place the line's vertical center exactly in the middle of the box.
+            const targetInternalY = offset + (currentLineHeight / 2);
             
             internalScrollViewRef.current?.scrollTo({
                 y: targetInternalY,
                 animated: true,
             });
-
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
-    }, [position, syncedLyrics, scrollViewHeight]);
+    }, [position, syncedLyrics, lyricsContentHeight]);
 
     const handleSeek = async (time: number) => {
         await TrackPlayer.seekTo(time);
@@ -100,20 +109,23 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
                 </View>
 
                 {/* Content */}
-                <View className="flex-1">
+                <View style={{ height: lyricsContentHeight }}>
                     {isLoadingLyrics ? (
-                        <View className="flex-1 items-center justify-center">
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                             <ActivityIndicator size="large" color="white" />
                             <Text className="text-zinc-400 mt-4 font-medium">Finding lyrics...</Text>
                         </View>
                     ) : syncedLyrics && syncedLyrics.length > 0 ? (
-                        <View className="flex-1">
+                        <View style={{ flex: 1 }}>
                             <ScrollView 
                                 ref={internalScrollViewRef}
                                 showsVerticalScrollIndicator={false}
-                                scrollEnabled={false} // Managed by position sync
+                                scrollEnabled={false}
                                 onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
-                                contentContainerStyle={{ paddingVertical: scrollViewHeight / 2 || boxSize / 2 }}
+                                contentContainerStyle={{ 
+                                    paddingTop: lyricsContentHeight / 2,
+                                    paddingBottom: lyricsContentHeight / 2,
+                                }}
                             >
                                 {syncedLyrics.map((item, index) => {
                                     const isActive = index === activeIndex;
@@ -124,9 +136,9 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
                                             onPress={() => handleSeek(item.time)}
                                             activeOpacity={0.7}
                                             onLayout={(e) => {
-                                                lineHeights.current[index] = e.nativeEvent.layout.height + 16;
+                                                lineHeights.current[index] = e.nativeEvent.layout.height + 12;
                                             }}
-                                            style={{ minHeight: 45, justifyContent: 'center', marginVertical: 8 }}
+                                            style={{ minHeight: 40, justifyContent: 'center', marginVertical: 6 }}
                                         >
                                             <MotiView
                                                 animate={{
@@ -136,7 +148,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
                                                 transition={{ type: 'timing', duration: 150 }}
                                             >
                                                 <Text
-                                                    className={`${isActive ? 'text-2xl' : 'text-xl'} font-bold leading-8 text-center`}
+                                                    className={`${isActive ? 'text-xl' : 'text-lg'} font-bold leading-7 text-center`}
                                                     style={{
                                                         color: isActive ? '#fff' : '#ccc',
                                                         textShadowColor: isActive ? 'rgba(0,0,0,0.5)' : 'transparent',
@@ -153,15 +165,15 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
                             </ScrollView>
                         </View>
                     ) : plainLyrics ? (
-                        <View className="flex-1">
+                        <View style={{ flex: 1 }}>
                             <ScrollView showsVerticalScrollIndicator={false}>
-                                <Text className="text-2xl text-zinc-200 font-bold leading-relaxed px-2 text-center">
+                                <Text className="text-xl text-zinc-200 font-bold leading-relaxed px-2 text-center">
                                     {lyricsService.cleanPlainLyrics(plainLyrics)}
                                 </Text>
                             </ScrollView>
                         </View>
                     ) : (
-                        <View className="flex-1 items-center justify-center px-6">
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
                             <Music2 size={48} color="#52525b" />
                             <Text className="text-zinc-400 text-center mt-6 text-lg font-medium leading-6">
                                 We couldn't find lyrics for this one.

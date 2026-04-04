@@ -78,26 +78,19 @@ export default function SongDetailsScreen() {
 
         try {
             setDownloadProgress(0);
-            const qualityIdx = (audioQuality === '320kbps' || audioQuality === '160kbps') 
-                ? (song.downloadUrl.length > 4 ? 4 : Math.max(0, song.downloadUrl.length - 1)) 
-                : 0;
-            let url = song.downloadUrl[qualityIdx]?.url || song.downloadUrl[0]?.url;
+            
+            // Robust quality selection for downloads
+            let target = song.downloadUrl?.find((d: any) => d.quality === String(audioQuality)) ||
+                (song.downloadUrl ? song.downloadUrl[song.downloadUrl.length - 1] : null);
+
+            let url = target?.url;
 
             if (!url) {
                 Alert.alert("Error", "No download source available for this track.");
                 return;
             }
 
-            if (url.startsWith('file://')) {
-                // Find a remote URL instead
-                const remoteUrl = song.downloadUrl.find(u => u.url?.startsWith('http'))?.url;
-                if (remoteUrl) {
-                    url = remoteUrl;
-                } else {
-                    Alert.alert("Local File", "No remote source found for this track.");
-                    return;
-                }
-            }
+            const downloadUrl = url;
 
             const downloadDir = `${FileSystem.documentDirectory}Melodix/Downloads/`;
             const dirInfo = await FileSystem.getInfoAsync(downloadDir);
@@ -106,14 +99,14 @@ export default function SongDetailsScreen() {
             }
 
             const cleanTitle = song.name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_').trim();
-            const filename = `${cleanTitle}_${song.id}.mp3`;
+            const filename = `${cleanTitle}_${song.id}.m4a`;
             const fileUri = `${downloadDir}${filename}`;
 
             const notificationId = `download-${song.id}`;
             let lastUpdate = Date.now();
 
             const downloadResumable = FileSystem.createDownloadResumable(
-                url,
+                downloadUrl,
                 fileUri,
                 {},
                 async (progressData: any) => {
@@ -262,7 +255,7 @@ export default function SongDetailsScreen() {
                                         if (isCurrentPlaying) {
                                             if (!isPlaying) togglePlayback();
                                         } else {
-                                            playTrack(song, [song], audioQuality);
+                                            playTrack(song, [song]);
                                         }
                                         router.push('/player');
                                     }}
@@ -363,16 +356,18 @@ export default function SongDetailsScreen() {
                                 ) : (
                                     <TouchableOpacity
                                         onPress={() => {
-                                            const qualityIdx = audioQuality === '320kbps' 
-                                                ? (song.downloadUrl.length > 4 ? 4 : Math.max(0, song.downloadUrl.length - 1)) 
-                                                : 0;
+                                            const itemUrl = song.downloadUrl ? (song.downloadUrl[
+                                                (audioQuality === '320kbps' ? 4 : audioQuality === '160kbps' ? 3 : 2)
+                                            ]?.url || song.downloadUrl[song.downloadUrl.length - 1]?.url) : null;
+                                            
                                             const track: any = {
                                                 id: song.id,
-                                                url: song.downloadUrl[qualityIdx]?.url || song.downloadUrl[0]?.url,
+                                                url: itemUrl,
                                                 title: song.name,
                                                 artist: song.artists.primary?.[0]?.name,
                                                 artwork: jioSaavnService.sanitizeImageUrl(song.image),
-                                                duration: song.duration
+                                                duration: song.duration,
+                                                originalDownloadUrl: song.downloadUrl
                                             };
                                             if (!track.url) {
                                                 Alert.alert("Error", "Cannot add to queue: No audio source found.");

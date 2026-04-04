@@ -53,12 +53,12 @@ export default function AlbumScreen() {
     }, [id]);
 
     const handlePlaySong = useCallback((song: any) => {
-        playTrack(song, album?.songs || [], audioQuality);
+        playTrack(song, album?.songs || []);
     }, [playTrack, album, audioQuality]);
 
     const handlePlayAll = useCallback(() => {
         if (album?.songs && album.songs.length > 0) {
-            playTrack(album.songs[0], album.songs, audioQuality);
+            playTrack(album.songs[0], album.songs);
         }
     }, [playTrack, album, audioQuality]);
 

@@ -19,13 +19,13 @@ export default function PlaylistScreen() {
     const playlist = playlists.find(p => p.id === id);
 
     const handlePlaySong = useCallback((song: any) => {
-        playTrack(song, playlist?.songs?.map((s: any) => s.song_data) || [], audioQuality);
+        playTrack(song, playlist?.songs?.map((s: any) => s.song_data) || []);
     }, [playTrack, playlist, audioQuality]);
 
     const handlePlayAll = useCallback(() => {
         const songs = playlist?.songs?.map((s: any) => s.song_data) || [];
         if (songs.length > 0) {
-            playTrack(songs[0], songs, audioQuality);
+            playTrack(songs[0], songs);
         }
     }, [playTrack, playlist, audioQuality]);
 

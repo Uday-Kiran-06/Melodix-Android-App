@@ -4,12 +4,15 @@ import * as Haptics from 'expo-haptics';
 import TrackPlayer, {
     RepeatMode,
     State,
-    Track
+    Track,
+    TrackType,
+    PitchAlgorithm,
 } from "react-native-track-player";
 import { create } from "zustand";
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { jioSaavnService } from "../services/jiosaavn";
 import { LrcLine, lyricsService } from "../services/lyrics";
+import { useSettingsStore } from "./useSettingsStore";
 
 interface PlayerState {
     currentTrack: Track | null;
@@ -50,6 +53,21 @@ const qualityMap = {
     "320kbps": 4,
 };
 
+const getTrackUrl = (trackData: any, quality: keyof typeof qualityMap): string => {
+    if (!trackData.downloadUrl || !Array.isArray(trackData.downloadUrl) || trackData.downloadUrl.length === 0) {
+        return trackData.url;
+    }
+
+    // Find the specific quality or fallback to the closest one
+    const qualityString = String(quality);
+    const target = trackData.downloadUrl.find((d: any) => d.quality === qualityString) ||
+        trackData.downloadUrl[trackData.downloadUrl.length - 1];
+
+    if (!target || !target.url) return trackData.url;
+
+    return target.url;
+};
+
 // Utility to ensure no null/undefined values reach the OS media session, but empty strings become undefined
 const cleanMetadata = (val: any, fallback: string | undefined): string | undefined => {
     if (!val || val === "null" || val === "undefined") return fallback;
@@ -85,8 +103,8 @@ export const usePlayerStore = create<PlayerState>()(
                 else TrackPlayer.setRepeatMode(RepeatMode.Off);
             },
 
-            playTrack: async (trackData: any, queueData: any[] = [], quality: keyof typeof qualityMap = "320kbps") => {
-                const qualityIdx = qualityMap[quality];
+            playTrack: async (trackData: any, queueData: any[] = [], quality?: keyof typeof qualityMap) => {
+                const selectedQuality = quality || useSettingsStore.getState().audioQuality;
                 const { shuffle } = get();
                 const { downloadedSongs } = require('./useLibraryStore').useLibraryStore.getState();
 
@@ -99,7 +117,8 @@ export const usePlayerStore = create<PlayerState>()(
                 const downloadedTrack = downloadedSongs.find((s: any) => s.id === String(trackData.id));
                 const isOffline = !(await jioSaavnService.checkConnection());
 
-                let trackUrl = trackData.downloadUrl ? (trackData.downloadUrl[qualityIdx]?.url || trackData.downloadUrl[trackData.downloadUrl.length - 1]?.url) : trackData.url;
+                let trackUrl = getTrackUrl(trackData, selectedQuality);
+                console.log(`[Player]: Loading track with quality: ${selectedQuality}`);
 
                 // If we have a local copy, prioritize it
                 if (downloadedTrack?.localUri) {
@@ -150,7 +169,7 @@ export const usePlayerStore = create<PlayerState>()(
                     const localItem = downloadedSongs.find((s: any) => s.id === String(item.id));
                     return {
                         id: String(item.id),
-                        url: localItem?.localUri || (item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1]?.url) : item.url),
+                        url: localItem?.localUri || getTrackUrl(item, selectedQuality),
                         title: cleanMetadata(item.name || item.title, "Unknown Track"),
                         artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                         artwork: cleanMetadata(
@@ -200,7 +219,7 @@ export const usePlayerStore = create<PlayerState>()(
                                 .filter((item: any) => !existingIds.has(item.id))
                                 .map((item: any) => ({
                                     id: String(item.id),
-                                    url: item.downloadUrl ? (item.downloadUrl[qualityIdx]?.url || item.downloadUrl[item.downloadUrl.length - 1]?.url) : item.url,
+                                    url: getTrackUrl(item, selectedQuality),
                                     title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                     artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                     artwork: cleanMetadata(
@@ -399,6 +418,11 @@ export const usePlayerStore = create<PlayerState>()(
                     await TrackPlayer.pause();
                     set({ isPlaying: false });
                 }
+
+                // Load lyrics for the restored track on restart
+                if (currentTrack) {
+                    get().loadLyrics(currentTrack);
+                }
             },
 
             loadRecommendations: async (songId: string) => {
@@ -414,7 +438,7 @@ export const usePlayerStore = create<PlayerState>()(
                             .filter((item: any) => !existingIds.has(String(item.id)))
                             .map((item: any) => ({
                                 id: String(item.id),
-                                url: item.downloadUrl ? (item.downloadUrl[4]?.url || item.downloadUrl[item.downloadUrl.length - 1]?.url) : item.url,
+                                url: getTrackUrl(item, useSettingsStore.getState().audioQuality),
                                 title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                 artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                 artwork: cleanMetadata(

@@ -165,10 +165,27 @@ export const useLibraryStore = create<LibState>()(
                 if (!db) return;
 
                 try {
+                    // 1. Delete from internal storage
                     const song = db.getFirstSync('SELECT localUri FROM downloads WHERE id = ?', [songId]) as any;
                     if (song && song.localUri) {
                         await FileSystem.deleteAsync(song.localUri, { idempotent: true });
                     }
+
+                    // 2. Delete from public MediaLibrary (Android Music Folder)
+                    const { status } = await MediaLibrary.requestPermissionsAsync();
+                    if (status === 'granted') {
+                        const album = await MediaLibrary.getAlbumAsync('Melodix');
+                        if (album) {
+                            const { assets } = await MediaLibrary.getAssetsAsync({ album, mediaType: 'audio' });
+                            // Find assets ending in the song ID or exactly matching the asset ID
+                            const matchingAssets = assets.filter(a => a.filename.includes(`_${songId}.`) || a.id === songId);
+                            if (matchingAssets.length > 0) {
+                                await MediaLibrary.deleteAssetsAsync(matchingAssets);
+                            }
+                        }
+                    }
+
+                    // 3. Remove DB entry & sync
                     db.runSync('DELETE FROM downloads WHERE id = ?', [songId]);
                     await get().syncDownloadedSongs();
                 } catch (error) {

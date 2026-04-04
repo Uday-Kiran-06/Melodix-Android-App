@@ -37,51 +37,71 @@ class NativeAudioEffectsModule : Module() {
       
       if (action == AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION && sessionId != 0) {
         if (sessionId == lastSessionId) {
-          android.util.Log.d("AudioEffects", "Session ID same as last ($sessionId), skipping reapply")
+          android.util.Log.d("AudioEffects", "Session ID same as last ($sessionId), skipping")
           return
         }
         lastSessionId = sessionId
-        android.util.Log.i("AudioEffects", "New session ID captured: $sessionId. Reapplying effects...")
-        reapplyEffects()
+        audioSessionId = sessionId
+        android.util.Log.i("AudioEffects", "New session ID captured: $sessionId. Will attach effects lazily.")
+        // DON'T call reapplyEffects() here — let effects attach lazily when 
+        // the JS side calls setEnabled/setBassBoost/etc.
+        // This prevents disrupting ExoPlayer's audio pipeline.
+        attachEffectsGently()
       } else if (action == AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION) {
         android.util.Log.d("AudioEffects", "Session closed: $sessionId")
       }
     }
   }
 
-  private fun reapplyEffects() {
-    try {
-      // Release old effects if they exist
-      releaseEffects()
+  /**
+   * Gently attach effects to the current session WITHOUT releasing existing ones first.
+   * Only creates effects that are currently enabled. This avoids disrupting ExoPlayer's
+   * audio decoder pipeline which can cause sample rate drift (2x speed bug).
+   */
+  private fun attachEffectsGently() {
+    if (audioSessionId == 0) return
 
-      // Create new effects for the current session
-      if (lastSessionId != 0 && lastSessionId != -1) {
-        audioSessionId = lastSessionId
-        equalizer = Equalizer(0, audioSessionId).apply {
-          enabled = isEqEnabled
-          eqGains.forEach { (band, gain) ->
-            try {
-              setBandLevel(band.toShort(), gain.toShort())
-            } catch (e: Exception) {}
+    try {
+      // Only create/recreate effects that are actually enabled
+      if (isEqEnabled) {
+        try {
+          equalizer?.release()
+          equalizer = Equalizer(0, audioSessionId).apply {
+            enabled = true
+            eqGains.forEach { (band, gain) ->
+              try { setBandLevel(band.toShort(), gain.toShort()) } catch (e: Exception) {}
+            }
           }
+        } catch (e: Exception) {
+          android.util.Log.e("AudioEffects", "Failed to attach EQ: ${e.message}")
         }
-        
-        bassBoost = BassBoost(0, audioSessionId).apply {
-          enabled = isBassEnabled
-          try {
-            setStrength(bassStrength.toShort())
-          } catch (e: Exception) {}
+      }
+
+      if (isBassEnabled) {
+        try {
+          bassBoost?.release()
+          bassBoost = BassBoost(0, audioSessionId).apply {
+            enabled = true
+            try { setStrength(bassStrength.toShort()) } catch (e: Exception) {}
+          }
+        } catch (e: Exception) {
+          android.util.Log.e("AudioEffects", "Failed to attach Bass: ${e.message}")
         }
-        
-        loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
-          enabled = isLoudnessEnabled
-          try {
-            setTargetGain(loudnessGain)
-          } catch (e: Exception) {}
+      }
+
+      if (isLoudnessEnabled) {
+        try {
+          loudnessEnhancer?.release()
+          loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
+            enabled = true
+            try { setTargetGain(loudnessGain) } catch (e: Exception) {}
+          }
+        } catch (e: Exception) {
+          android.util.Log.e("AudioEffects", "Failed to attach Loudness: ${e.message}")
         }
       }
     } catch (e: Exception) {
-      android.util.Log.e("AudioEffects", "Failed to reapply effects: ${e.message}")
+      android.util.Log.e("AudioEffects", "Failed in attachEffectsGently: ${e.message}")
     }
   }
 
@@ -114,7 +134,7 @@ class NativeAudioEffectsModule : Module() {
     Function("setBassBoost") { strength: Int ->
       bassStrength = strength
       try {
-        if (bassBoost == null) bassBoost = BassBoost(0, audioSessionId)
+        if (bassBoost == null && audioSessionId != 0) bassBoost = BassBoost(0, audioSessionId)
         bassBoost?.setStrength(strength.toShort())
       } catch (e: Exception) {}
     }
@@ -122,7 +142,7 @@ class NativeAudioEffectsModule : Module() {
     Function("setEqualizerBandGain") { band: Int, gain: Int ->
       eqGains[band] = gain
       try {
-        if (equalizer == null) equalizer = Equalizer(0, audioSessionId)
+        if (equalizer == null && audioSessionId != 0) equalizer = Equalizer(0, audioSessionId)
         if (band < (equalizer?.numberOfBands ?: 0)) {
           equalizer?.setBandLevel(band.toShort(), gain.toShort())
         }
@@ -132,7 +152,7 @@ class NativeAudioEffectsModule : Module() {
     Function("setLoudnessGain") { gain: Int ->
       loudnessGain = gain
       try {
-        if (loudnessEnhancer == null) loudnessEnhancer = LoudnessEnhancer(audioSessionId)
+        if (loudnessEnhancer == null && audioSessionId != 0) loudnessEnhancer = LoudnessEnhancer(audioSessionId)
         loudnessEnhancer?.setTargetGain(gain)
       } catch (e: Exception) {}
     }
@@ -142,18 +162,37 @@ class NativeAudioEffectsModule : Module() {
         when (type) {
           "bass" -> {
             isBassEnabled = enabled
-            if (bassBoost == null && audioSessionId != 0) bassBoost = BassBoost(0, audioSessionId)
-            bassBoost?.enabled = enabled
+            if (enabled) {
+              if (bassBoost == null && audioSessionId != 0) bassBoost = BassBoost(0, audioSessionId)
+              bassBoost?.enabled = true
+            } else {
+              bassBoost?.enabled = false
+              // Release when disabled to free resources and avoid pipeline interference
+              bassBoost?.release()
+              bassBoost = null
+            }
           }
           "eq" -> {
             isEqEnabled = enabled
-            if (equalizer == null && audioSessionId != 0) equalizer = Equalizer(0, audioSessionId)
-            equalizer?.enabled = enabled
+            if (enabled) {
+              if (equalizer == null && audioSessionId != 0) equalizer = Equalizer(0, audioSessionId)
+              equalizer?.enabled = true
+            } else {
+              equalizer?.enabled = false
+              equalizer?.release()
+              equalizer = null
+            }
           }
           "loudness" -> {
             isLoudnessEnabled = enabled
-            if (loudnessEnhancer == null && audioSessionId != 0) loudnessEnhancer = LoudnessEnhancer(audioSessionId)
-            loudnessEnhancer?.enabled = enabled
+            if (enabled) {
+              if (loudnessEnhancer == null && audioSessionId != 0) loudnessEnhancer = LoudnessEnhancer(audioSessionId)
+              loudnessEnhancer?.enabled = true
+            } else {
+              loudnessEnhancer?.enabled = false
+              loudnessEnhancer?.release()
+              loudnessEnhancer = null
+            }
           }
         }
       } catch (e: Exception) {
@@ -165,7 +204,8 @@ class NativeAudioEffectsModule : Module() {
       if (sessionId != 0 && sessionId != lastSessionId) {
         android.util.Log.i("AudioEffects", "Manually setting session ID: $sessionId")
         lastSessionId = sessionId
-        reapplyEffects()
+        audioSessionId = sessionId
+        attachEffectsGently()
       }
     }
 
@@ -190,7 +230,8 @@ class NativeAudioEffectsModule : Module() {
            if (sessionId != lastSessionId) {
              android.util.Log.i("AudioEffects", "Scanned and found NEW session ID: $sessionId")
              lastSessionId = sessionId
-             reapplyEffects()
+             audioSessionId = sessionId
+             attachEffectsGently()
              true
            } else {
              android.util.Log.d("AudioEffects", "Scanned session ID $sessionId is same as last.")
@@ -207,7 +248,7 @@ class NativeAudioEffectsModule : Module() {
 
     Function("getEqualizerBands") {
       try {
-        if (equalizer == null) equalizer = Equalizer(0, audioSessionId)
+        if (equalizer == null && audioSessionId != 0) equalizer = Equalizer(0, audioSessionId)
         val bands = equalizer?.numberOfBands ?: 0
         val result = mutableListOf<Map<String, Any>>()
         for (i in 0 until bands) {

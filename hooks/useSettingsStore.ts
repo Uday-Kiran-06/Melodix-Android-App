@@ -28,6 +28,7 @@ interface SettingsState {
     setLoudnessEnabled: (enabled: boolean) => void;
     setCrossfadeEnabled: (enabled: boolean) => void;
     setCrossfadeDuration: (duration: number) => void;
+    resetAudioEffects: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -58,10 +59,33 @@ export const useSettingsStore = create<SettingsState>()(
             setLoudnessEnabled: (enabled) => set({ isLoudnessEnabled: enabled }),
             setCrossfadeEnabled: (enabled) => set({ crossfadeEnabled: enabled }),
             setCrossfadeDuration: (duration) => set({ crossfadeDuration: duration }),
+
+            resetAudioEffects: () => set({
+                bassBoostStrength: 0,
+                eqGains: [0, 0, 0, 0, 0],
+                loudnessGain: 0,
+                isBassBoostEnabled: false,
+                isEqEnabled: false,
+                isLoudnessEnabled: false,
+                crossfadeEnabled: true,
+                crossfadeDuration: 3,
+            }),
         }),
         {
             name: "melodix-settings",
             storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({
+                audioQuality: state.audioQuality,
+                theme: state.theme,
+                bassBoostStrength: state.bassBoostStrength,
+                eqGains: state.eqGains,
+                loudnessGain: state.loudnessGain,
+                crossfadeEnabled: state.crossfadeEnabled,
+                crossfadeDuration: state.crossfadeDuration,
+                isBassBoostEnabled: state.isBassBoostEnabled,
+                isEqEnabled: state.isEqEnabled,
+                isLoudnessEnabled: state.isLoudnessEnabled,
+            }),
         }
     )
 );

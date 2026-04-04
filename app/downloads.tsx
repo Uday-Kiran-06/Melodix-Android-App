@@ -88,7 +88,7 @@ export default function DownloadsScreen() {
     const handlePlayDownloaded = useCallback(async (song: any) => {
         // Just pass the song. playTrack will automatically find the localUri
         // from downloadedSongs and verify it exists before playing local.
-        playTrack(song, downloadedSongs, audioQuality);
+        playTrack(song, downloadedSongs);
     }, [playTrack, downloadedSongs, audioQuality]);
 
     const handlePlayAll = useCallback(async () => {

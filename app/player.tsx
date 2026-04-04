@@ -93,7 +93,7 @@ export default function PlayerScreen() {
     } = usePlayerStore();
     const { toggleLike, isLiked } = useLibraryStore();
     const { user } = useAuth();
-    const { theme } = useSettingsStore();
+    const { theme, audioQuality } = useSettingsStore();
     const isDark = theme === 'dark';
     const router = useRouter();
     const [isPlaylistModalVisible, setIsPlaylistModalVisible] = React.useState(false);
@@ -295,11 +295,6 @@ export default function PlayerScreen() {
         }
     }, [isSkipping]);
 
-    if (!currentTrack) return null;
-
-    const currentPos = isDragging ? dragPosition : position;
-    const progress = (currentPos / (duration || 1)) * 100;
-
     // Find active lyric line for preview
     const activeLyricLine = React.useMemo(() => {
         if (!syncedLyrics || syncedLyrics.length === 0) return null;
@@ -308,6 +303,11 @@ export default function PlayerScreen() {
             return position >= line.time && (!nextLine || position < nextLine.time);
         });
     }, [position, syncedLyrics]);
+
+    if (!currentTrack) return null;
+
+    const currentPos = isDragging ? dragPosition : position;
+    const progress = (currentPos / (duration || 1)) * 100;
 
     return (
         <View className="flex-1 bg-black">
@@ -398,10 +398,19 @@ export default function PlayerScreen() {
                 <View className="mt-12">
                     <View className="flex-row justify-between items-center">
                         <View className="flex-1 mr-4">
-                            <MarqueeText
-                                text={currentTrack.title || ""}
-                                className="text-white text-2xl font-bold"
-                            />
+                            <View className="flex-row items-center">
+                                <MarqueeText
+                                    text={currentTrack.title || ""}
+                                    className="text-white text-2xl font-bold flex-1"
+                                />
+                                {(audioQuality === '160kbps' || audioQuality === '320kbps') && (
+                                    <View className="ml-2 px-1.5 py-0.5 rounded-sm border border-emerald-500/50 items-center justify-center">
+                                        <Text className="text-emerald-500 text-[8px] font-black uppercase tracking-tighter">
+                                            {audioQuality === '320kbps' ? 'LOSSLESS' : 'HQ'}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
                             <Text className="text-gray-400 text-lg" numberOfLines={1}>{currentTrack.artist}</Text>
                         </View>
                         <View className="flex-row items-center">

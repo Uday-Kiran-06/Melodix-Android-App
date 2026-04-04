@@ -88,13 +88,13 @@ export default function LikedSongsScreen() {
 
     const handlePlaySong = useCallback((song: any) => {
         Haptics.selectionAsync();
-        playTrack(song, sortedAndFilteredSongs, audioQuality);
+        playTrack(song, sortedAndFilteredSongs);
     }, [playTrack, sortedAndFilteredSongs, audioQuality]);
 
     const handlePlayAll = useCallback(() => {
         if (sortedAndFilteredSongs.length > 0) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            playTrack(sortedAndFilteredSongs[0], sortedAndFilteredSongs, audioQuality);
+            playTrack(sortedAndFilteredSongs[0], sortedAndFilteredSongs);
         }
     }, [playTrack, sortedAndFilteredSongs, audioQuality]);
 

@@ -339,7 +339,7 @@ export default function HomeScreen() {
             if (item.type === 'category') {
                 handleSearchPress(item.name);
             } else {
-                playTrack(item, recentlyPlayedItems, audioQuality);
+                playTrack(item, recentlyPlayedItems);
             }
           }}
           className={`w-[48%] h-14 mb-3 rounded-lg flex-row items-center overflow-hidden ${isDark ? 'bg-zinc-900/40' : 'bg-slate-200/50'}`}

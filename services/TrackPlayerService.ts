@@ -57,8 +57,9 @@ export const PlaybackService = async function () {
             lastTrackId = event.track.id;
 
             store.setCurrentTrack(event.track);
-            // Reset lyrics state for the new track
+            // Reset and load lyrics state for the new track
             usePlayerStore.setState({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
+            store.loadLyrics(event.track);
 
             // Load more recommendations if we're nearing the end of the queue
             const index = event.index;

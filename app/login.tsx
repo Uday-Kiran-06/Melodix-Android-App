@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Lock, Mail, Music } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
@@ -13,6 +13,8 @@ export default function LoginScreen() {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const router = useRouter();
+    const { mode } = useLocalSearchParams();
+    const isConnectMode = mode === 'connect';
     const { signInWithGoogle } = useAuth();
 
     const handleLogin = async () => {
@@ -45,7 +47,7 @@ export default function LoginScreen() {
             />
 
             <TouchableOpacity
-                onPress={() => router.replace('/(tabs)')}
+                onPress={() => router.back()}
                 className="absolute top-12 left-6 z-10 w-10 h-10 items-center justify-center rounded-full bg-zinc-900/50 border border-zinc-800"
             >
                 <ArrowLeft size={24} color="#fff" />
@@ -65,8 +67,10 @@ export default function LoginScreen() {
                     <Text className="text-zinc-500 mt-2 font-medium">Your personal music companion</Text>
                 </View>
 
-                <GlassCard intensity={30} style={{ padding: 24 }}>
-                    <Text className="text-white text-2xl font-bold mb-6">Login</Text>
+                <GlassCard intensity={30} style={{ padding: 24, flex: undefined }}>
+                    <Text className="text-white text-2xl font-bold mb-6">
+                        {isConnectMode ? 'Connect Account' : 'Login'}
+                    </Text>
 
                     <View className="flex-row items-center bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-4 py-3 mb-4">
                         <Mail size={20} color="#52525b" className="mr-3" />
@@ -99,7 +103,7 @@ export default function LoginScreen() {
                         className="bg-emerald-600 py-4 rounded-xl items-center mb-4"
                     >
                         <Text className="text-white font-bold text-lg">
-                            {loading ? 'Logging in...' : 'Sign In'}
+                            {loading ? 'Logging in...' : (isConnectMode ? 'Connect' : 'Sign In')}
                         </Text>
                     </TouchableOpacity>
 
@@ -128,7 +132,7 @@ export default function LoginScreen() {
 
                     <View className="flex-row justify-center mt-6">
                         <Text className="text-gray-400">Don't have an account? </Text>
-                        <Link href="/signup" asChild>
+                        <Link href={{ pathname: '/signup', params: isConnectMode ? { mode: 'connect' } : {} }} asChild>
                             <TouchableOpacity>
                                 <Text className="text-emerald-500 font-bold">Sign Up</Text>
                             </TouchableOpacity>

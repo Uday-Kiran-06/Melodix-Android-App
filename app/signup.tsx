@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { Lock, Mail, Music, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -12,6 +12,8 @@ export default function SignupScreen() {
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { mode } = useLocalSearchParams();
+    const isConnectMode = mode === 'connect';
 
     const handleSignup = async () => {
         if (!email || !password || !name) {
@@ -32,7 +34,7 @@ export default function SignupScreen() {
             Alert.alert('Error', error.message);
         } else {
             Alert.alert('Success', 'Check your email for the confirmation link!');
-            router.replace('/login');
+            router.replace(isConnectMode ? '/login?mode=connect' : '/login');
         }
         setLoading(false);
     };
@@ -107,7 +109,7 @@ export default function SignupScreen() {
 
                     <View className="flex-row justify-center mt-6">
                         <Text className="text-gray-400">Already have an account? </Text>
-                        <Link href="/login" asChild>
+                        <Link href={{ pathname: '/login', params: isConnectMode ? { mode: 'connect' } : {} }} asChild>
                             <TouchableOpacity>
                                 <Text className="text-emerald-500 font-bold">Login</Text>
                             </TouchableOpacity>

@@ -26,7 +26,7 @@ const { height, width } = Dimensions.get('window');
 
 export default function FullLyricsScreen() {
     const { currentTrack, syncedLyrics, plainLyrics, isLoadingLyrics } = usePlayerStore();
-    const { position } = useProgress(200);
+    const { position } = useProgress(100);
     const [activeIndex, setActiveIndex] = useState(-1);
     const flatListRef = useRef<FlatList>(null);
     const router = useRouter();
@@ -44,9 +44,8 @@ export default function FullLyricsScreen() {
             flatListRef.current?.scrollToIndex({
                 index,
                 animated: true,
-                viewPosition: 0.3,
+                viewPosition: 0.5,
             });
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
     }, [position, syncedLyrics]);
 
@@ -102,12 +101,14 @@ export default function FullLyricsScreen() {
                         ref={flatListRef}
                         data={syncedLyrics}
                         keyExtractor={(_, i) => i.toString()}
-                        contentContainerStyle={{ paddingHorizontal: 32, paddingTop: height * 0.1, paddingBottom: height * 0.4 }}
+                        ListHeaderComponent={() => <View style={{ height: height * 0.5 }} />}
+                        ListFooterComponent={() => <View style={{ height: height * 0.5 }} />}
+                        contentContainerStyle={{ paddingHorizontal: 32 }}
                         showsVerticalScrollIndicator={false}
                         initialNumToRender={20}
                         getItemLayout={(_, index) => ({
-                            length: 90,
-                            offset: 90 * index,
+                            length: 100,
+                            offset: 100 * index + (height * 0.5),
                             index,
                         })}
                         renderItem={({ item, index }) => {
@@ -116,7 +117,7 @@ export default function FullLyricsScreen() {
                                 <TouchableOpacity
                                     onPress={() => handleSeek(item.time)}
                                     activeOpacity={0.7}
-                                    style={{ minHeight: 70, justifyContent: 'center', marginVertical: 10 }}
+                                    style={{ minHeight: 80, justifyContent: 'center', marginVertical: 10 }}
                                 >
                                     <MotiView
                                         animate={{
