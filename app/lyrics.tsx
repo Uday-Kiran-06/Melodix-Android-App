@@ -26,7 +26,8 @@ const { height, width } = Dimensions.get('window');
 
 export default function FullLyricsScreen() {
     const { currentTrack, syncedLyrics, plainLyrics, isLoadingLyrics } = usePlayerStore();
-    const { position } = useProgress(100);
+    const { position } = useProgress(50); // Faster polling for premium sync
+    const syncOffset = -0.15; // 150ms internal correction
     const [activeIndex, setActiveIndex] = useState(-1);
     const [containerHeight, setContainerHeight] = useState(height);
     const flatListRef = useRef<FlatList>(null);
@@ -35,13 +36,17 @@ export default function FullLyricsScreen() {
     useEffect(() => {
         if (!syncedLyrics || syncedLyrics.length === 0) return;
 
+        // Find the current line based on position + offset
+        const adjustedPosition = position - syncOffset;
         const index = syncedLyrics.findIndex((line, i) => {
             const nextLine = syncedLyrics[i + 1];
-            return position >= line.time && (!nextLine || position < nextLine.time);
+            return adjustedPosition >= line.time && (!nextLine || adjustedPosition < nextLine.time);
         });
 
         if (index !== -1 && index !== activeIndex) {
+            const start = Date.now();
             setActiveIndex(index);
+            console.log(`[FullLyrics]: Line changed to ${index} (Sync latency: ${Date.now() - start}ms)`);
             flatListRef.current?.scrollToIndex({
                 index,
                 animated: true,
@@ -126,7 +131,7 @@ export default function FullLyricsScreen() {
                                             opacity: isActive ? 1 : 0.3,
                                             scale: isActive ? 1.05 : 0.95,
                                         }}
-                                        transition={{ type: 'timing', duration: 300 }}
+                                        transition={{ type: 'timing', duration: 120 }}
                                     >
                                         <Text
                                             className="text-3xl font-bold"

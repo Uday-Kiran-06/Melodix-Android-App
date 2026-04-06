@@ -12,6 +12,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { jioSaavnService } from "../services/jiosaavn";
 import { LrcLine, lyricsService } from "../services/lyrics";
+import { sanitizeImageUrl } from "../utils/stringUtils";
 import { useSettingsStore } from "./useSettingsStore";
 
 interface PlayerState {
@@ -69,11 +70,11 @@ const getTrackUrl = (trackData: any, quality: keyof typeof qualityMap): string =
     return target.url;
 };
 
-// Utility to ensure no null/undefined values reach the OS media session, but empty strings become undefined
+// Utility to ensure no null/undefined values reach the OS media session
 const cleanMetadata = (val: any, fallback: string | undefined): string | undefined => {
-    if (!val || val === "null" || val === "undefined") return fallback;
+    if (val === null || val === undefined || val === "null" || val === "undefined") return fallback;
     const str = String(val).trim();
-    if (str === "") return fallback;
+    if (str === "" || str === "[object Object]") return fallback;
     return str;
 };
 
@@ -153,7 +154,7 @@ export const usePlayerStore = create<PlayerState>()(
                     title: cleanMetadata(trackData.name || trackData.title, "Unknown Track"),
                     artist: cleanMetadata(trackData.artists?.primary?.[0]?.name || trackData.artist, "Unknown Artist"),
                     artwork: cleanMetadata(
-                        typeof trackData.image === 'string' ? trackData.image : (Array.isArray(trackData.image) ? trackData.image[trackData.image.length - 1]?.url : (trackData.image?.url || trackData.artwork)),
+                        sanitizeImageUrl(trackData.image || trackData.artwork),
                         undefined
                     ),
                     album: cleanMetadata(trackData.album?.name || trackData.album, "Single"),
@@ -175,7 +176,7 @@ export const usePlayerStore = create<PlayerState>()(
                         title: cleanMetadata(item.name || item.title, "Unknown Track"),
                         artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                         artwork: cleanMetadata(
-                            typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
+                            sanitizeImageUrl(item.image || item.artwork),
                             undefined
                         ),
                         album: cleanMetadata(item.album?.name || item.album, "Single"),
@@ -225,7 +226,7 @@ export const usePlayerStore = create<PlayerState>()(
                                     title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                     artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                     artwork: cleanMetadata(
-                                        typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
+                                        sanitizeImageUrl(item.image || item.artwork),
                                         undefined
                                     ),
                                     album: cleanMetadata(item.album?.name || item.album, "Single"),
@@ -451,7 +452,7 @@ export const usePlayerStore = create<PlayerState>()(
                                 title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                 artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                 artwork: cleanMetadata(
-                                    typeof item.image === 'string' ? item.image : (Array.isArray(item.image) ? item.image[item.image.length - 1]?.url : (item.image?.url || item.artwork)),
+                                    sanitizeImageUrl(item.image || item.artwork),
                                     undefined
                                 ),
                                 album: cleanMetadata(item.album?.name || item.album, "Single"),

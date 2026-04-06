@@ -31,7 +31,8 @@ interface LyricsViewProps {
 
 export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
     const { currentTrack, syncedLyrics, plainLyrics, isLoadingLyrics, loadLyrics } = usePlayerStore();
-    const { position } = useProgress(100); // Fast polling for precise sync
+    const { position } = useProgress(50); // Faster polling for premium sync
+    const syncOffset = -0.15; // 150ms earlier provides the most "on-beat" feel
     const [activeIndex, setActiveIndex] = useState(-1);
     const lyricsContainerRef = useRef<View>(null);
     const internalScrollViewRef = useRef<ScrollView>(null);
@@ -66,14 +67,17 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
     useEffect(() => {
         if (!syncedLyrics || syncedLyrics.length === 0) return;
 
-        // Find the current line based on position
+        // Find the current line based on position + offset
+        const adjustedPosition = position - syncOffset;
         const index = syncedLyrics.findIndex((line, i) => {
             const nextLine = syncedLyrics[i + 1];
-            return position >= line.time && (!nextLine || position < nextLine.time);
+            return adjustedPosition >= line.time && (!nextLine || adjustedPosition < nextLine.time);
         });
 
         if (index !== -1 && index !== activeIndex) {
+            const start = Date.now();
             setActiveIndex(index);
+            console.log(`[Lyrics]: Highlighted line ${index} (Sync latency: ${Date.now() - start}ms)`);
             
             // Calculate INTERNAL scroll position to center the current line
             let offset = 0;
@@ -143,22 +147,26 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
                                             onLayout={(e) => {
                                                 lineHeights.current[index] = e.nativeEvent.layout.height + 12;
                                             }}
-                                            style={{ minHeight: 40, justifyContent: 'center', marginVertical: 6 }}
+                                            style={{ minHeight: 40, justifyContent: 'center', marginVertical: 6, width: '100%' }}
                                         >
                                             <MotiView
                                                 animate={{
                                                     opacity: isActive ? 1 : (isNext ? 0.6 : 0.15),
                                                     scale: isActive ? 1.05 : 0.95,
                                                 }}
-                                                transition={{ type: 'timing', duration: 150 }}
+                                                transition={{ type: 'timing', duration: 80 }}
+                                                style={{ width: '100%' }}
                                             >
                                                 <Text
-                                                    className={`${isActive ? 'text-xl' : 'text-lg'} font-bold leading-7 text-center`}
+                                                    className={`${isActive ? 'text-xl' : 'text-lg'} font-bold leading-7 text-center px-4`}
+                                                    numberOfLines={2}
+                                                    adjustsFontSizeToFit
                                                     style={{
                                                         color: isActive ? '#fff' : '#ccc',
                                                         textShadowColor: isActive ? 'rgba(0,0,0,0.5)' : 'transparent',
                                                         textShadowOffset: { width: 0, height: 2 },
                                                         textShadowRadius: 4,
+                                                        width: '100%',
                                                     }}
                                                 >
                                                     {item.text}
@@ -172,7 +180,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ scrollViewRef }) => {
                     ) : plainLyrics ? (
                         <View style={{ flex: 1 }}>
                             <ScrollView showsVerticalScrollIndicator={false}>
-                                <Text className="text-xl text-zinc-200 font-bold leading-relaxed px-2 text-center">
+                                <Text className="text-xl text-zinc-200 font-bold leading-relaxed px-4 text-center">
                                     {lyricsService.cleanPlainLyrics(plainLyrics)}
                                 </Text>
                             </ScrollView>

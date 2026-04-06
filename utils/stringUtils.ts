@@ -16,6 +16,7 @@ export const decodeHtml = (html: string): string => {
 
 /**
  * Ensures image URLs are high quality and secure (https)
+ * Handles string, array of objects, or single object inputs from various API versions
  */
 export const sanitizeImageUrl = (images: any): string | null => {
   if (!images) return null;
@@ -23,19 +24,24 @@ export const sanitizeImageUrl = (images: any): string | null => {
   let url = '';
   if (Array.isArray(images)) {
     // Pick the last one (highest resolution)
-    url = images[images.length - 1]?.link || images[images.length - 1]?.url || '';
+    const last = images[images.length - 1];
+    url = last?.link || last?.url || (typeof last === 'string' ? last : '');
   } else if (typeof images === 'string') {
     url = images;
   } else if (typeof images === 'object') {
     url = images.link || images.url || '';
   }
 
-  if (!url) return null;
+  if (!url || typeof url !== 'string') return null;
 
-  // Upgrade to HTTPS and high res if it's a JioSaavn link
-  let sanitized = url.replace('http:', 'https:');
+  // Cleanup: Support URLs that might have been partially decoded or have extra markers
+  let sanitized = url.trim().replace('http:', 'https:');
+  
+  // Upgrade to high resolution if it's a known JioSaavn/CDN pattern
   if (sanitized.includes('150x150')) {
     sanitized = sanitized.replace('150x150', '500x500');
+  } else if (sanitized.includes('50x50')) {
+    sanitized = sanitized.replace('50x50', '500x500');
   }
   
   return sanitized;

@@ -52,11 +52,15 @@ export const PlaybackService = async function () {
         const store = usePlayerStore.getState();
         
         if (event.track !== undefined && event.track !== null) {
+            console.log(`[PlayerService]: Active track changed to: ${event.track.title} (${event.track.id})`);
+            
             // Prevent duplicate triggers for the same track ID
             const isNewTrack = lastTrackId !== event.track.id;
             lastTrackId = event.track.id;
 
+            // Sync the store with the track provided by TrackPlayer
             store.setCurrentTrack(event.track);
+            
             // Reset and load lyrics state for the new track ONLY if needed
             if (isNewTrack || !store.syncedLyrics || !store.plainLyrics) {
                 usePlayerStore.setState({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
@@ -71,6 +75,9 @@ export const PlaybackService = async function () {
                     store.loadRecommendations(event.track.id);
                 }
             }
+        } else {
+            console.log('[PlayerService]: Active track cleared');
+            store.setCurrentTrack(null);
         }
     });
 
