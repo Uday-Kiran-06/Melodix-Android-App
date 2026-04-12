@@ -482,9 +482,9 @@ export const usePlayerStore = create<PlayerState>()(
             },
 
             loadLyrics: async (track: Track) => {
-                if (!track) return;
+                if (!track || !track.id) return;
                 
-                const { isLoadingLyrics, syncedLyrics, currentTrack } = get();
+                const { syncedLyrics, currentTrack } = get();
                 
                 // If we already have synced lyrics for this exact track ID, skip
                 if (syncedLyrics && syncedLyrics.length > 0 && currentTrack?.id === track.id) {
@@ -493,14 +493,34 @@ export const usePlayerStore = create<PlayerState>()(
                 
                 set({ isLoadingLyrics: true });
                 try {
-                    const { synced, plain } = await lyricsService.getSyncedLyrics(track);
+                    // Pass additional context to help lyrics provider distinguish regional versions
+                    const context = {
+                        album: track.album || undefined,
+                        language: track.genre || undefined // 'genre' holds the language in Melodix
+                    };
+
+                    const { synced, plain } = await lyricsService.getSyncedLyrics(track, context);
+                    
+                    // Race condition guard: Check if the user has already moved to another track
+                    if (get().currentTrack?.id !== track.id) {
+                        console.log(`[Player]: Abandoning lyrics load for stale track: ${track.title}`);
+                        return;
+                    }
+
                     // Use JioSaavn as fallback for plain text if LrcLib didn't provide any
                     const fallbackPlain = plain || await jioSaavnService.getLyrics(track.id);
+                    
+                    // Final race condition guard
+                    if (get().currentTrack?.id !== track.id) return;
+
                     set({ syncedLyrics: synced, plainLyrics: fallbackPlain });
                 } catch (e) {
                     console.error("[Player]: Failed to load lyrics:", e);
                 } finally {
-                    set({ isLoadingLyrics: false });
+                    // Final check to ensure we only reset loading state for the relevant track's flow
+                    if (get().currentTrack?.id === track.id) {
+                        set({ isLoadingLyrics: false });
+                    }
                 }
             },
         }),

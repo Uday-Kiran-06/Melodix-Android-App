@@ -61,9 +61,13 @@ export const PlaybackService = async function () {
             // Sync the store with the track provided by TrackPlayer
             store.setCurrentTrack(event.track);
             
-            // Reset and load lyrics state for the new track ONLY if needed
+            // Reset and load lyrics state for the new track
             if (isNewTrack || !store.syncedLyrics || !store.plainLyrics) {
-                usePlayerStore.setState({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
+                usePlayerStore.setState({ 
+                    syncedLyrics: null, 
+                    plainLyrics: null, 
+                    isLoadingLyrics: true // Set to true immediately to show spinner
+                });
                 store.loadLyrics(event.track);
             }
 
@@ -78,6 +82,8 @@ export const PlaybackService = async function () {
         } else {
             console.log('[PlayerService]: Active track cleared');
             store.setCurrentTrack(null);
+            // Clear lyrics state when track is cleared
+            usePlayerStore.setState({ syncedLyrics: null, plainLyrics: null, isLoadingLyrics: false });
         }
     });
 

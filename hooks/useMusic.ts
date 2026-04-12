@@ -18,7 +18,7 @@ export const useInfiniteSongs = (query: string) => {
 export const useInfinitePodcasts = () => {
     return useInfiniteQuery({
         queryKey: ['infinite-podcasts'],
-        queryFn: ({ pageParam = 1 }) => jioSaavnService.searchSongs('top telugu hindi english podcasts', 'english,hindi,telugu', pageParam, 50),
+        queryFn: ({ pageParam = 1 }) => jioSaavnService.searchPodcasts('top telugu hindi english podcasts', pageParam, 50),
         getNextPageParam: (lastPage, allPages) => lastPage.length > 0 ? allPages.length + 1 : undefined,
         initialPageParam: 1,
         staleTime: 1000 * 60 * 30, // Podcasts stay fresh longer
@@ -138,7 +138,7 @@ export const useFeaturedPlaylists = () => {
 export const usePodcasts = () => {
     return useQuery({
         queryKey: ['podcasts'],
-        queryFn: () => jioSaavnService.searchSongs('top telugu hindi english podcasts', 'english,hindi,telugu')
+        queryFn: () => jioSaavnService.searchPodcasts('top telugu hindi english podcasts')
     });
 };
 

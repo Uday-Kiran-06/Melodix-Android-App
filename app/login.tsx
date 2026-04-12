@@ -4,7 +4,6 @@ import { ArrowLeft, Lock, Mail, Music } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
 import { useAuth } from '../components/AuthContext';
-import GlassCard from '../components/GlassCard';
 import { supabase } from '../services/supabase';
 
 export default function LoginScreen() {
@@ -67,12 +66,12 @@ export default function LoginScreen() {
                     <Text className="text-zinc-500 mt-2 font-medium">Your personal music companion</Text>
                 </View>
 
-                <GlassCard intensity={30} style={{ padding: 24, flex: undefined }}>
+                <View className="bg-zinc-900/80 border border-zinc-800 rounded-3xl p-6">
                     <Text className="text-white text-2xl font-bold mb-6">
                         {isConnectMode ? 'Connect Account' : 'Login'}
                     </Text>
 
-                    <View className="flex-row items-center bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-4 py-3 mb-4">
+                    <View className="flex-row items-center bg-zinc-800/80 border border-zinc-700/50 rounded-xl px-4 py-3 mb-4">
                         <Mail size={20} color="#52525b" className="mr-3" />
                         <TextInput
                             placeholder="Email"
@@ -85,7 +84,7 @@ export default function LoginScreen() {
                         />
                     </View>
 
-                    <View className="flex-row items-center bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-4 py-3 mb-8">
+                    <View className="flex-row items-center bg-zinc-800/80 border border-zinc-700/50 rounded-xl px-4 py-3 mb-8">
                         <Lock size={20} color="#52525b" className="mr-3" />
                         <TextInput
                             placeholder="Password"
@@ -103,14 +102,14 @@ export default function LoginScreen() {
                         className="bg-emerald-600 py-4 rounded-xl items-center mb-4"
                     >
                         <Text className="text-white font-bold text-lg">
-                            {loading ? 'Logging in...' : (isConnectMode ? 'Connect' : 'Sign In')}
+                            {loading ? 'Signing in...' : (isConnectMode ? 'Connect' : 'Sign In')}
                         </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={handleGoogleLogin}
                         disabled={loading || googleLoading}
-                        className="bg-white py-4 rounded-xl items-center flex-row justify-center shadow-lg"
+                        className="bg-white py-4 rounded-xl items-center flex-row justify-center"
                         style={{ elevation: 3 }}
                     >
                         {googleLoading ? (
@@ -138,7 +137,7 @@ export default function LoginScreen() {
                             </TouchableOpacity>
                         </Link>
                     </View>
-                </GlassCard>
+                </View>
             </KeyboardAvoidingView>
         </View>
     );

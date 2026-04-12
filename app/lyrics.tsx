@@ -26,8 +26,8 @@ const { height, width } = Dimensions.get('window');
 
 export default function FullLyricsScreen() {
     const { currentTrack, syncedLyrics, plainLyrics, isLoadingLyrics } = usePlayerStore();
-    const { position } = useProgress(50); // Faster polling for premium sync
-    const syncOffset = -0.15; // 150ms internal correction
+    const { position } = useProgress(16); // ~60fps polling for near frame-perfect sync
+    const syncOffset = 0.15; // Highlight lines 150ms early so they feel on-beat
     const [activeIndex, setActiveIndex] = useState(-1);
     const [containerHeight, setContainerHeight] = useState(height);
     const flatListRef = useRef<FlatList>(null);
@@ -37,7 +37,7 @@ export default function FullLyricsScreen() {
         if (!syncedLyrics || syncedLyrics.length === 0) return;
 
         // Find the current line based on position + offset
-        const adjustedPosition = position - syncOffset;
+        const adjustedPosition = position + syncOffset;
         const index = syncedLyrics.findIndex((line, i) => {
             const nextLine = syncedLyrics[i + 1];
             return adjustedPosition >= line.time && (!nextLine || adjustedPosition < nextLine.time);

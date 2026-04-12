@@ -139,10 +139,10 @@ const SongListItem = memo(({ item, onPress, onMore, isDark }: { item: any; onPre
       </View>
       <View className="flex-1">
         <Text className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`} numberOfLines={1}>
-          {item?.name || item?.title || "Unknown Track"}
+          {item?.name || item?.title || item?.showName || "Unknown"}
         </Text>
         <Text className="text-zinc-500 text-sm" numberOfLines={1}>
-          {item?.artists?.primary?.[0]?.name || item?.artist || "Unknown Artist"}
+          {item?.artists?.primary?.[0]?.name || item?.artist || item?.subtitle || "Unknown Artist"}
         </Text>
       </View>
       <TouchableOpacity 
@@ -514,7 +514,7 @@ export default function HomeScreen() {
           renderItem={({ item }) => (
             <SongListItem 
                item={item} 
-               onPress={() => handleSongPress(item.id)} 
+               onPress={() => item.type === 'podcast' ? router.push(`/podcast/${item.id}` as any) : handleSongPress(item.id)} 
                onMore={() => setSelectedSongForMenu(item)}
                isDark={isDark} 
             />

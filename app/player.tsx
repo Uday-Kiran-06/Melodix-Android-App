@@ -15,6 +15,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { LyricsView } from '@/components/LyricsView';
+import { MeshGradientBackground } from '@/components/MeshGradientBackground';
 import {
     ChevronDown,
     Clock,
@@ -298,11 +299,47 @@ export default function PlayerScreen() {
     // Find active lyric line for preview
     const activeLyricLine = React.useMemo(() => {
         if (!syncedLyrics || syncedLyrics.length === 0) return null;
+        const adjustedPosition = position + 0.1; // 100ms internal correction
         return syncedLyrics.find((line, i) => {
             const nextLine = syncedLyrics[i + 1];
-            return position >= line.time && (!nextLine || position < nextLine.time);
+            return adjustedPosition >= line.time && (!nextLine || adjustedPosition < nextLine.time);
         });
     }, [position, syncedLyrics]);
+    
+    const nextUpSongs = React.useMemo(() => {
+        if (!queue || !currentTrack) return [];
+        const index = queue.findIndex(t => t.id === currentTrack.id);
+        return index === -1 ? [] : queue.slice(index + 1);
+    }, [queue, currentTrack?.id]);
+
+    const currentIndexInQueue = React.useMemo(() => {
+        if (!queue || !currentTrack) return -1;
+        return queue.findIndex(t => t.id === currentTrack.id);
+    }, [queue, currentTrack?.id]);
+
+    const renderQueueHeader = React.useMemo(() => {
+        if (!currentTrack) return null;
+        return (
+            <>
+                <Text className="text-emerald-500 font-bold mb-4">Now Playing</Text>
+                <View className="flex-row items-center mb-8 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
+                    <MusicImage
+                        images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
+                        className="w-14 h-14 rounded-lg mr-4"
+                        transition={300}
+                    />
+                    <View className="flex-1">
+                        <Text className="text-white font-bold text-lg" numberOfLines={1}>{currentTrack.title}</Text>
+                        <Text className="text-zinc-400" numberOfLines={1}>{currentTrack.artist}</Text>
+                    </View>
+                    <View className="w-2 h-2 bg-emerald-500 rounded-full" />
+                </View>
+                {nextUpSongs.length > 0 && (
+                    <Text className="text-white font-bold text-xl mb-4">Next Up</Text>
+                )}
+            </>
+        );
+    }, [currentTrack, nextUpSongs.length]);
 
     if (!currentTrack) return null;
 
@@ -311,11 +348,13 @@ export default function PlayerScreen() {
 
     return (
         <View className="flex-1 bg-black">
+            <MeshGradientBackground />
+            
             <MusicImage
                 images={getImageUrl(currentTrack)}
-                className="absolute w-full h-full opacity-50"
-                blurRadius={50}
-                transition={500}
+                className="absolute w-full h-full opacity-30"
+                blurRadius={80}
+                transition={1000}
             />
 
             <LinearGradient
@@ -635,54 +674,34 @@ export default function PlayerScreen() {
                     </View>
 
                     <FlatList
-                        data={queue}
+                        data={nextUpSongs}
                         keyExtractor={(track, index) => `${track.id}-${index}`}
                         className="px-6"
                         showsVerticalScrollIndicator={false}
-                        removeClippedSubviews={true}
-                        ListHeaderComponent={() => (
-                            <>
-                                <Text className="text-emerald-500 font-bold mb-4">Now Playing</Text>
-                                <View className="flex-row items-center mb-8 bg-zinc-900/50 p-3 rounded-xl">
-                                    <MusicImage
-                                        images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
-                                        className="w-14 h-14 rounded-lg mr-4"
-                                        transition={300}
-                                    />
-                                    <View className="flex-1">
-                                        <Text className="text-white font-bold text-lg" numberOfLines={1}>{currentTrack.title}</Text>
-                                        <Text className="text-zinc-400" numberOfLines={1}>{currentTrack.artist}</Text>
-                                    </View>
-                                    <View className="w-2 h-2 bg-emerald-500 rounded-full" />
+                        initialNumToRender={10}
+                        maxToRenderPerBatch={10}
+                        windowSize={5}
+                        ListHeaderComponent={renderQueueHeader}
+                        renderItem={({ item: track, index }) => (
+                            <TouchableOpacity
+                                className="flex-row items-center mb-4"
+                                onPress={() => handleSkipToTrack(currentIndexInQueue + 1 + index)}
+                            >
+                                <MusicImage
+                                    images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
+                                    className="w-12 h-12 rounded-md mr-4"
+                                    transition={300}
+                                />
+                                <View className="flex-1">
+                                    <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>
+                                    <Text className="text-zinc-500 text-sm" numberOfLines={1}>{track.artist}</Text>
                                 </View>
-                                <Text className="text-white font-bold text-xl mb-4">Next Up</Text>
-                            </>
+                                <MoreVertical size={20} color="#71717a" />
+                            </TouchableOpacity>
                         )}
-                        renderItem={({ item: track, index }) => {
-                            const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-                            if (index <= currentIndex) return null;
-
-                            return (
-                                <TouchableOpacity
-                                    className="flex-row items-center mb-4"
-                                    onPress={() => handleSkipToTrack(index)}
-                                >
-                                    <MusicImage
-                                        images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
-                                        className="w-12 h-12 rounded-md mr-4"
-                                        transition={300}
-                                    />
-                                    <View className="flex-1">
-                                        <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>
-                                        <Text className="text-zinc-500 text-sm" numberOfLines={1}>{track.artist}</Text>
-                                    </View>
-                                    <MoreVertical size={20} color="#71717a" />
-                                </TouchableOpacity>
-                            );
-                        }}
                         ListFooterComponent={() => (
                             <>
-                                {queue.findIndex(t => t.id === currentTrack.id) === queue.length - 1 && (
+                                {nextUpSongs.length === 0 && (
                                     <View className="py-10 items-center">
                                         <Text className="text-zinc-500 text-center italic">End of queue. Playing recommendations...</Text>
                                     </View>
