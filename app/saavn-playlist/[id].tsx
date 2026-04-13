@@ -136,7 +136,7 @@ export default function SaavnPlaylistScreen() {
     );
 
     const renderItem = ({ item: song }: { item: any }) => {
-        const isLiked = likedSongs.some((s: any) => s.id === song.id);
+        const isLiked = likedSongs.some((s: any) => String(s.id) === String(song.id));
         
         return (
             <View className="mb-2 px-4">

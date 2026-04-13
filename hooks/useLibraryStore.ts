@@ -356,7 +356,7 @@ export const useLibraryStore = create<LibState>()(
 
             toggleLike: async (song: any, userId?: string) => {
                 const { likedSongs } = get();
-                const isCurrentlyLiked = likedSongs.some(s => s.id === song.id);
+                const isCurrentlyLiked = likedSongs.some(s => String(s.id) === String(song.id));
 
                 const normalizedSong: Song = {
                     ...song,
@@ -372,7 +372,7 @@ export const useLibraryStore = create<LibState>()(
                 try { await Haptics.selectionAsync(); } catch (e) { }
 
                 if (isCurrentlyLiked) {
-                    set({ likedSongs: likedSongs.filter(s => s.id !== song.id) });
+                    set({ likedSongs: likedSongs.filter(s => String(s.id) !== String(song.id)) });
                     await supabase.from('liked_songs').delete().eq('song_id', song.id).eq('user_id', userId);
                 } else {
                     set({ likedSongs: [normalizedSong, ...likedSongs] });
@@ -385,7 +385,7 @@ export const useLibraryStore = create<LibState>()(
             },
 
             isLiked: (songId: string) => {
-                return get().likedSongs.some(s => s.id === songId);
+                return get().likedSongs.some(s => String(s.id) === String(songId));
             },
 
             createPlaylist: async (name: string, userId: string) => {
@@ -447,7 +447,7 @@ export const useLibraryStore = create<LibState>()(
                     const { playlists } = get();
                     const updatedPlaylists = playlists.map(p => {
                         if (p.id === playlistId) {
-                            return { ...p, songs: (p.songs || []).filter((s: any) => s.song_data?.id !== songId) };
+                            return { ...p, songs: (p.songs || []).filter((s: any) => String(s.song_data?.id) !== String(songId)) };
                         }
                         return p;
                     });
@@ -460,7 +460,7 @@ export const useLibraryStore = create<LibState>()(
             isSongInPlaylist: (songId: string, playlistId: string) => {
                 const { playlists } = get();
                 const playlist = playlists.find(p => p.id === playlistId);
-                return playlist ? (playlist.songs || []).some((s: any) => s.song_data?.id === songId) : false;
+                return playlist ? (playlist.songs || []).some((s: any) => String(s.song_data?.id) === String(songId)) : false;
             },
 
             deletePlaylist: async (playlistId: string) => {

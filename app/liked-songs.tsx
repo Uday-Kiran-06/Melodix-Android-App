@@ -60,17 +60,8 @@ export default function LikedSongsScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortMode, setSortMode] = useState<'recent' | 'az' | 'artist'>('recent');
 
-    const sortedAndFilteredSongs = useMemo(() => {
+    const sortedSongs = useMemo(() => {
         let result = [...likedSongs];
-
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
-            result = result.filter(s => 
-                s.name.toLowerCase().includes(q) || 
-                (s.artists?.primary?.[0]?.name || '').toLowerCase().includes(q)
-            );
-        }
-
         switch (sortMode) {
             case 'az':
                 result.sort((a, b) => a.name.localeCompare(b.name));
@@ -82,21 +73,29 @@ export default function LikedSongsScreen() {
             default:
                 break;
         }
-
         return result;
-    }, [likedSongs, searchQuery, sortMode]);
+    }, [likedSongs, sortMode]);
+
+    const sortedAndFilteredSongs = useMemo(() => {
+        if (!searchQuery.trim()) return sortedSongs;
+        const q = searchQuery.toLowerCase();
+        return sortedSongs.filter(s => 
+            s.name.toLowerCase().includes(q) || 
+            (s.artists?.primary?.[0]?.name || '').toLowerCase().includes(q)
+        );
+    }, [sortedSongs, searchQuery]);
 
     const handlePlaySong = useCallback((song: any) => {
         Haptics.selectionAsync();
-        playTrack(song, sortedAndFilteredSongs);
-    }, [playTrack, sortedAndFilteredSongs, audioQuality]);
+        playTrack(song, sortedSongs);
+    }, [playTrack, sortedSongs, audioQuality]);
 
     const handlePlayAll = useCallback(() => {
         if (sortedAndFilteredSongs.length > 0) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            playTrack(sortedAndFilteredSongs[0], sortedAndFilteredSongs);
+            playTrack(sortedAndFilteredSongs[0], sortedSongs);
         }
-    }, [playTrack, sortedAndFilteredSongs, audioQuality]);
+    }, [playTrack, sortedAndFilteredSongs, sortedSongs, audioQuality]);
 
     const renderItem = useCallback(({ item }: { item: any }) => (
         <SongRow

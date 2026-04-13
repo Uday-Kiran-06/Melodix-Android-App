@@ -22,7 +22,7 @@ const AnyFlashList = FlashList as any;
 const { width } = Dimensions.get('window');
 
 const SongItem = memo(({ item, onPlay, onToggleLike, onMore, isDark, results }: any) => {
-  const isLiked = useLibraryStore(state => state.likedSongs.some((s: any) => s.id === item.id));
+  const isLiked = useLibraryStore(state => state.likedSongs.some((s: any) => String(s.id) === String(item.id)));
 
   return (
     <View className="mb-2 flex-row items-center">
@@ -127,6 +127,24 @@ export default function SearchScreen() {
   const primaryColor = DesignSystem.colors.primary;
 
   const handleSongPress = useCallback((item: any, results: any[] | undefined) => {
+    const { likedSongs, playlists } = useLibraryStore.getState();
+
+    // Priority 1: Check Liked Songs
+    if (likedSongs.some((s: any) => String(s.id) === String(item.id))) {
+      playTrack(item, likedSongs);
+      return;
+    }
+
+    // Priority 2: Check Custom Playlists
+    for (const playlist of playlists) {
+      if (playlist.songs && playlist.songs.some((s: any) => String(s.song_data?.id) === String(item.id))) {
+        const playlistTracks = playlist.songs.map((s: any) => s.song_data);
+        playTrack(item, playlistTracks);
+        return;
+      }
+    }
+
+    // Default Fallback
     playTrack(item, results || []);
   }, [playTrack, audioQuality]);
 
