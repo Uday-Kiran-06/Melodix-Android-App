@@ -44,6 +44,7 @@ interface PlayerState {
     loadRecommendations: (songId: string) => Promise<void>;
     isLoadingRecommendations: boolean;
     loadLyrics: (track: Track) => Promise<void>;
+    clearRecommendationHistory: () => void;
 }
 
 // Map quality selection to JioSaavn API download link keys
@@ -80,6 +81,16 @@ const cleanMetadata = (val: any, fallback: string | undefined): string | undefin
 
 let timerInterval: NodeJS.Timeout | null = null;
 
+// Module-level re-entrancy lock — prevents PlaybackActiveTrackChanged and
+// PlaybackQueueEnded from triggering simultaneous recommendation loads.
+let isRecommendationInProgress = false;
+let lastRecommendationTime = 0;
+const RECOMMENDATION_DEBOUNCE_MS = 3000;
+
+// Session-level dedup: tracks recommended song IDs so we never re-add the same
+// song within a single listening session (cleared on playTrack).
+const sessionRecommendedIds = new Set<string>();
+
 export const usePlayerStore = create<PlayerState>()(
     persist(
         (set, get) => ({
@@ -96,6 +107,12 @@ export const usePlayerStore = create<PlayerState>()(
             plainLyrics: null,
             isLoadingLyrics: false,
             isRehydrated: false,
+
+            clearRecommendationHistory: () => {
+                sessionRecommendedIds.clear();
+                isRecommendationInProgress = false;
+                lastRecommendationTime = 0;
+            },
             setCurrentTrack: (track) => set({ currentTrack: track }),
             setIsPlaying: (playing) => set({ isPlaying: playing }),
             setShuffle: (shuffle) => set({ shuffle }),
@@ -210,7 +227,11 @@ export const usePlayerStore = create<PlayerState>()(
                 await TrackPlayer.play();
                 set({ currentTrack: trackToPlay, isPlaying: true });
 
-                // Vibe Match: Automatically add recommendations to queue
+                // Vibe Match: Automatically seed initial recommendations
+                // Clear session dedup so a fresh play starts a new rec pool.
+                sessionRecommendedIds.clear();
+                isRecommendationInProgress = false;
+
                 try {
                     const isConnected = await jioSaavnService.checkConnection();
                     if (isConnected) {
@@ -219,7 +240,11 @@ export const usePlayerStore = create<PlayerState>()(
                         if (recommendations && recommendations.length > 0) {
                             const existingIds = new Set(queueToPlay.map(t => t.id));
                             const recommendedTracks: Track[] = recommendations
-                                .filter((item: any) => !existingIds.has(item.id))
+                                .filter((item: any) => {
+                                    const id = String(item.id);
+                                    return !existingIds.has(id) && !sessionRecommendedIds.has(id);
+                                })
+                                .slice(0, 10) // Cap at 10 for the initial seed
                                 .map((item: any) => ({
                                     id: String(item.id),
                                     url: getTrackUrl(item, selectedQuality),
@@ -235,12 +260,15 @@ export const usePlayerStore = create<PlayerState>()(
                                     ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
                                     isLiveStream: false,
                                     // @ts-ignore
+                                    isRecommended: true,
+                                    // @ts-ignore
                                     originalDownloadUrl: item.downloadUrl,
                                     // @ts-ignore
                                     originalUrl: item.url
                                 }));
 
                             if (recommendedTracks.length > 0) {
+                                recommendedTracks.forEach(t => sessionRecommendedIds.add(t.id));
                                 await TrackPlayer.add(recommendedTracks);
                                 set((state) => ({
                                     queue: [...state.queue, ...recommendedTracks],
@@ -436,19 +464,52 @@ export const usePlayerStore = create<PlayerState>()(
             },
 
             loadRecommendations: async (songId: string) => {
-                const { queue, isLoadingRecommendations } = get();
-                if (isLoadingRecommendations) return;
+                // Module-level re-entrancy guard + debounce
+                const now = Date.now();
+                if (isRecommendationInProgress) {
+                    console.log('[Player]: loadRecommendations skipped — already in progress');
+                    return;
+                }
+                if (now - lastRecommendationTime < RECOMMENDATION_DEBOUNCE_MS) {
+                    console.log('[Player]: loadRecommendations debounced');
+                    return;
+                }
 
+                isRecommendationInProgress = true;
+                lastRecommendationTime = now;
                 set({ isLoadingRecommendations: true });
+
                 try {
-                    const recommendations = await jioSaavnService.getRecommendations(songId);
+                    // Build multi-seed from current song + up to 2 recent history tracks
+                    const seeds: string[] = [songId];
+                    try {
+                        const { useHistoryStore } = require('./useHistoryStore');
+                        const recentTracks: any[] = useHistoryStore.getState().recentlyPlayedTracks || [];
+                        const historySeedIds = recentTracks
+                            .filter(t => t.id && String(t.id) !== songId)
+                            .slice(0, 2)
+                            .map(t => String(t.id));
+                        seeds.push(...historySeedIds);
+                    } catch (e) {
+                        console.warn('[Player]: Could not load history seeds:', e);
+                    }
+
+                    console.log(`[Player]: loadRecommendations with ${seeds.length} seeds:`, seeds);
+                    const recommendations = await jioSaavnService.getMultiSeedRecommendations(seeds);
+
                     if (recommendations && recommendations.length > 0) {
                         const existingIds = new Set(get().queue.map(t => t.id));
+                        const selectedQuality = useSettingsStore.getState().audioQuality;
+
                         const recommendedTracks: Track[] = recommendations
-                            .filter((item: any) => !existingIds.has(String(item.id)))
+                            .filter((item: any) => {
+                                const id = String(item.id);
+                                return !existingIds.has(id) && !sessionRecommendedIds.has(id);
+                            })
+                            .slice(0, 12) // Top-up with max 12 at a time
                             .map((item: any) => ({
                                 id: String(item.id),
-                                url: getTrackUrl(item, useSettingsStore.getState().audioQuality),
+                                url: getTrackUrl(item, selectedQuality),
                                 title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                 artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                                 artwork: cleanMetadata(
@@ -461,23 +522,28 @@ export const usePlayerStore = create<PlayerState>()(
                                 ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
                                 isLiveStream: false,
                                 // @ts-ignore
+                                isRecommended: true,
+                                // @ts-ignore
                                 originalDownloadUrl: item.downloadUrl,
                                 // @ts-ignore
                                 originalUrl: item.url
                             }));
 
                         if (recommendedTracks.length > 0) {
+                            recommendedTracks.forEach(t => sessionRecommendedIds.add(t.id));
                             await TrackPlayer.add(recommendedTracks);
                             set((state) => ({
                                 queue: [...state.queue, ...recommendedTracks],
                                 originalQueue: [...state.originalQueue, ...recommendedTracks]
                             }));
+                            console.log(`[Player]: Added ${recommendedTracks.length} recommended tracks to queue`);
                         }
                     }
                 } catch (e) {
                     console.error("Failed to load recommendations:", e);
                 } finally {
                     set({ isLoadingRecommendations: false });
+                    isRecommendationInProgress = false;
                 }
             },
 

@@ -587,6 +587,56 @@ export const jioSaavnService = {
         }
     },
 
+    /**
+     * Fetches recommendations from multiple seed song IDs in parallel,
+     * merges, deduplicates, and returns a shuffled pool.
+     * Much more diverse than single-song seeding.
+     */
+    getMultiSeedRecommendations: async (songIds: string[]): Promise<Song[]> => {
+        if (!songIds || songIds.length === 0) return [];
+
+        try {
+            // Fan out parallel recommendation calls for each seed
+            const results = await Promise.allSettled(
+                songIds.map(id => jioSaavnService.getRecommendations(id))
+            );
+
+            // Merge all fulfilled results
+            const merged: Song[] = [];
+            const seedSet = new Set(songIds);
+
+            for (const result of results) {
+                if (result.status === 'fulfilled' && result.value.length > 0) {
+                    for (const song of result.value) {
+                        if (!seedSet.has(String(song.id))) {
+                            merged.push(song);
+                        }
+                    }
+                }
+            }
+
+            // Deduplicate by ID
+            const seen = new Set<string>();
+            const deduped = merged.filter(s => {
+                const id = String(s.id);
+                if (seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+
+            // Fisher-Yates shuffle for diversity
+            for (let i = deduped.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deduped[i], deduped[j]] = [deduped[j], deduped[i]];
+            }
+
+            return deduped;
+        } catch (error) {
+            console.error('[jioSaavnService]: getMultiSeedRecommendations failed:', error);
+            return [];
+        }
+    },
+
     getModules: async (languages: string = "telugu,hindi,english") => {
         try {
             const response = await fetchWithTimeout(`${PRIMARY_BASE_URL}/modules?language=${languages}`);

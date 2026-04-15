@@ -71,11 +71,14 @@ export const PlaybackService = async function () {
                 store.loadLyrics(event.track);
             }
 
-            // Load more recommendations if we're nearing the end of the queue
-            const index = event.index;
-            const queue = await TrackPlayer.getQueue();
-            if (index !== undefined && index >= queue.length - 3) {
-                if (event.track.id) {
+            // Proactively top up queue when 5 tracks or fewer remain
+            // (raised from 3 to give more time for multi-seed network calls)
+            if (isNewTrack) {
+                const index = event.index;
+                const queue = await TrackPlayer.getQueue();
+                const remaining = queue.length - ((index ?? 0) + 1);
+                if (remaining <= 5 && event.track.id) {
+                    console.log(`[PlayerService]: Only ${remaining} tracks left, topping up queue...`);
                     store.loadRecommendations(event.track.id);
                 }
             }

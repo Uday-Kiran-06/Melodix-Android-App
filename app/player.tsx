@@ -14,8 +14,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { LyricsView } from '@/components/LyricsView';
-import { MeshGradientBackground } from '@/components/MeshGradientBackground';
 import {
     ChevronDown,
     Clock,
@@ -29,16 +27,21 @@ import {
     Pause,
     Play,
     Plus,
+    RefreshCw,
     Repeat,
     Repeat1,
     Shuffle,
     SkipBack,
     SkipForward,
-    X
+    Trash2,
+    X,
+    Zap,
 } from 'lucide-react-native';
+import { MeshGradientBackground } from '@/components/MeshGradientBackground';
+import { LyricsView } from '@/components/LyricsView';
 import { MotiView } from 'moti';
 import React, { useCallback, useState } from 'react';
-import { Alert, Dimensions, FlatList, Modal, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { Alert, ActivityIndicator, Dimensions, FlatList, Modal, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import TrackPlayer, { useProgress } from 'react-native-track-player';
 
 Notifications.setNotificationHandler({
@@ -90,7 +93,8 @@ export default function PlayerScreen() {
     const { currentTrack, isPlaying, togglePlayback,
         shuffle, repeatMode, toggleShuffle, nextRepeatMode,
         addToQueue, removeFromQueue, isInQueue, queue,
-        sleepTimer, remainingTime, setSleepTimer, syncedLyrics
+        sleepTimer, remainingTime, setSleepTimer, syncedLyrics,
+        isLoadingRecommendations, loadRecommendations,
     } = usePlayerStore();
     const { toggleLike, isLiked } = useLibraryStore();
     const { user } = useAuth();
@@ -312,6 +316,18 @@ export default function PlayerScreen() {
         return index === -1 ? [] : queue.slice(index + 1);
     }, [queue, currentTrack?.id]);
 
+    // Split upcoming songs into user-queued vs Vibe Match recommended
+    const userQueuedSongs = React.useMemo(() =>
+        // @ts-ignore
+        nextUpSongs.filter(t => !t.isRecommended),
+        [nextUpSongs]
+    );
+    const vibeMatchSongs = React.useMemo(() =>
+        // @ts-ignore
+        nextUpSongs.filter(t => t.isRecommended),
+        [nextUpSongs]
+    );
+
     const currentIndexInQueue = React.useMemo(() => {
         if (!queue || !currentTrack) return -1;
         return queue.findIndex(t => t.id === currentTrack.id);
@@ -321,7 +337,7 @@ export default function PlayerScreen() {
         if (!currentTrack) return null;
         return (
             <>
-                <Text className="text-emerald-500 font-bold mb-4">Now Playing</Text>
+                <Text style={{ color: DesignSystem.colors.primary }} className="font-bold mb-4">Now Playing</Text>
                 <View className="flex-row items-center mb-8 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
                     <MusicImage
                         images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
@@ -332,14 +348,48 @@ export default function PlayerScreen() {
                         <Text className="text-white font-bold text-lg" numberOfLines={1}>{currentTrack.title}</Text>
                         <Text className="text-zinc-400" numberOfLines={1}>{currentTrack.artist}</Text>
                     </View>
-                    <View className="w-2 h-2 bg-emerald-500 rounded-full" />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: DesignSystem.colors.primary }} />
                 </View>
-                {nextUpSongs.length > 0 && (
-                    <Text className="text-white font-bold text-xl mb-4">Next Up</Text>
+
+                {userQueuedSongs.length > 0 && (
+                    <Text className="text-white font-bold text-xl mb-4">Up Next</Text>
+                )}
+
+                {/* User-queued songs */}
+                {userQueuedSongs.map((track, index) => (
+                    <TouchableOpacity
+                        key={`user-${track.id}-${index}`}
+                        className="flex-row items-center mb-4"
+                        onPress={() => handleSkipToTrack(currentIndexInQueue + 1 + index)}
+                    >
+                        <MusicImage
+                            images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
+                            className="w-12 h-12 rounded-md mr-4"
+                            transition={300}
+                        />
+                        <View className="flex-1">
+                            <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>
+                            <Text className="text-zinc-500 text-sm" numberOfLines={1}>{track.artist}</Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => removeFromQueue(track.id)}
+                            className="p-2"
+                        >
+                            <Trash2 size={16} color="#71717a" />
+                        </TouchableOpacity>
+                    </TouchableOpacity>
+                ))}
+
+                {/* Vibe Match section header */}
+                {vibeMatchSongs.length > 0 && (
+                    <View className="flex-row items-center mb-4 mt-2">
+                        <Zap size={16} color={DesignSystem.colors.primary} />
+                        <Text style={{ color: DesignSystem.colors.primary }} className="font-bold text-xl ml-1">Vibe Match</Text>
+                    </View>
                 )}
             </>
         );
-    }, [currentTrack, nextUpSongs.length]);
+    }, [currentTrack, userQueuedSongs, vibeMatchSongs, currentIndexInQueue]);
 
     if (!currentTrack) return null;
 
@@ -539,8 +589,19 @@ export default function PlayerScreen() {
                 </View>
 
                 <View className="flex-row justify-between items-center mt-12 px-2">
-                    <TouchableOpacity onPress={() => setIsQueueVisible(true)}>
+                    {/* Queue button with count badge */}
+                    <TouchableOpacity onPress={() => setIsQueueVisible(true)} className="relative">
                         <ListMusic size={24} color="#fff" />
+                        {nextUpSongs.length > 0 && (
+                            <View
+                                style={{ backgroundColor: DesignSystem.colors.primary }}
+                                className="absolute -top-2 -right-2 w-4 h-4 rounded-full items-center justify-center"
+                            >
+                                <Text className="text-white text-[8px] font-black">
+                                    {nextUpSongs.length > 99 ? '99+' : nextUpSongs.length}
+                                </Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setIsPlaylistModalVisible(true)}>
                         <Plus size={24} color="#fff" />
@@ -666,16 +727,22 @@ export default function PlayerScreen() {
                 onRequestClose={() => setIsQueueVisible(false)}
             >
                 <View className="flex-1 bg-black pt-12">
+                    {/* Header */}
                     <View className="px-6 flex-row justify-between items-center mb-6">
-                        <Text className="text-white text-3xl font-bold">Queue</Text>
+                        <View>
+                            <Text className="text-white text-3xl font-bold">Queue</Text>
+                            {nextUpSongs.length > 0 && (
+                                <Text className="text-zinc-500 text-sm">{nextUpSongs.length} tracks remaining</Text>
+                            )}
+                        </View>
                         <TouchableOpacity onPress={() => setIsQueueVisible(false)}>
                             <X size={28} color="#fff" />
                         </TouchableOpacity>
                     </View>
 
                     <FlatList
-                        data={nextUpSongs}
-                        keyExtractor={(track, index) => `${track.id}-${index}`}
+                        data={vibeMatchSongs}
+                        keyExtractor={(track, index) => `rec-${track.id}-${index}`}
                         className="px-6"
                         showsVerticalScrollIndicator={false}
                         initialNumToRender={10}
@@ -685,26 +752,63 @@ export default function PlayerScreen() {
                         renderItem={({ item: track, index }) => (
                             <TouchableOpacity
                                 className="flex-row items-center mb-4"
-                                onPress={() => handleSkipToTrack(currentIndexInQueue + 1 + index)}
+                                onPress={() => handleSkipToTrack(
+                                    currentIndexInQueue + 1 + userQueuedSongs.length + index
+                                )}
                             >
-                                <MusicImage
-                                    images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
-                                    className="w-12 h-12 rounded-md mr-4"
-                                    transition={300}
-                                />
-                                <View className="flex-1">
-                                    <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>
-                                    <Text className="text-zinc-500 text-sm" numberOfLines={1}>{track.artist}</Text>
+                                <View className="relative">
+                                    <MusicImage
+                                        images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
+                                        className="w-12 h-12 rounded-md mr-4"
+                                        transition={300}
+                                    />
                                 </View>
-                                <MoreVertical size={20} color="#71717a" />
+                                <View className="flex-1 mr-2">
+                                    <Text className="text-zinc-300 font-medium" numberOfLines={1}>{track.title}</Text>
+                                    <View className="flex-row items-center mt-0.5">
+                                        <Zap size={10} color={DesignSystem.colors.primary} />
+                                        <Text style={{ color: DesignSystem.colors.primary }} className="text-xs ml-1">{track.artist}</Text>
+                                    </View>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => removeFromQueue(track.id)}
+                                    className="p-2"
+                                >
+                                    <Trash2 size={16} color="#52525b" />
+                                </TouchableOpacity>
                             </TouchableOpacity>
                         )}
                         ListFooterComponent={() => (
                             <>
                                 {nextUpSongs.length === 0 && (
                                     <View className="py-10 items-center">
-                                        <Text className="text-zinc-500 text-center italic">End of queue. Playing recommendations...</Text>
+                                        <Zap size={32} color={DesignSystem.colors.primary} style={{ opacity: 0.4 }} />
+                                        <Text className="text-zinc-500 text-center italic mt-2">Queue empty. Tap Load More for Vibe Match.</Text>
                                     </View>
+                                )}
+
+                                {/* Manual Load More button */}
+                                {currentTrack && (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            if (currentTrack.id) loadRecommendations(currentTrack.id);
+                                        }}
+                                        disabled={isLoadingRecommendations}
+                                        style={{ borderColor: DesignSystem.colors.primary }}
+                                        className="mt-4 mb-6 mx-4 py-3 rounded-2xl border items-center flex-row justify-center"
+                                    >
+                                        {isLoadingRecommendations ? (
+                                            <>
+                                                <ActivityIndicator size="small" color={DesignSystem.colors.primary} />
+                                                <Text style={{ color: DesignSystem.colors.primary }} className="ml-2 font-semibold">Loading Vibe Match...</Text>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <RefreshCw size={16} color={DesignSystem.colors.primary} />
+                                                <Text style={{ color: DesignSystem.colors.primary }} className="ml-2 font-semibold">Load More</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
                                 )}
                                 <View className="h-20" />
                             </>
