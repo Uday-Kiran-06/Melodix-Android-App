@@ -236,69 +236,9 @@ export const jioSaavnService = {
         }
     },
 
-    searchPodcasts: async (query: string, page: number = 1, limit: number = 20) => {
-        // The saavn API does not have a /search/podcasts endpoint.
-        // Instead, we search for well-known podcast show titles as songs/episodes.
-        const podcastQueries = [
-            'podcast show episodes',
-            'ted talks audio',
-            'joe rogan experience',
-            'storytelling podcast hindi',
-            'comedy podcast telugu',
-        ];
-        try {
-            // Use the provided query or rotate through known podcast searches
-            const searchQuery = query.includes('podcast') ? query : podcastQueries[(page - 1) % podcastQueries.length];
-            const baseUrl = PRIMARY_BASE_URL;
-            const fullUrl = `${baseUrl}/search/songs?query=${encodeURIComponent(searchQuery)}&page=${page}&limit=${limit}`;
-            const response = await fetchWithTimeout(fullUrl);
-            if (response.ok) {
-                const data = await safeParseJson(response);
-                const results = data?.data?.results || [];
-                // Filter only results that look like podcast episodes (longer duration, or name contains podcast keywords)
-                return results.map((s: any) => ({
-                    ...s,
-                    name: jioSaavnService.decodeHtml(s.name || s.title),
-                    image: s.image ? jioSaavnService.sanitizeImageUrl(s.image) : null,
-                    type: 'podcast',
-                    artist: s.artists?.primary?.[0]?.name || s.artist || "Podcast"
-                }));
-            }
-            return [];
-        } catch (error) {
-            console.error("[jioSaavnService]: searchPodcasts failed", error);
-            return [];
-        }
-    },
 
-    getPodcastDetails: async (id: string) => {
-        try {
-            const baseUrl = PRIMARY_BASE_URL;
-            // The endpoint for podcast details is usually /podcasts?id=...
-            const fullUrl = `${baseUrl}/podcasts?id=${id}`;
-            const response = await fetchWithTimeout(fullUrl);
-            if (response.ok) {
-                const data = await safeParseJson(response);
-                if (data?.data) {
-                    return {
-                        ...data.data,
-                        name: jioSaavnService.decodeHtml(data.data.name),
-                        image: data.data.image ? jioSaavnService.sanitizeImageUrl(data.data.image) : null,
-                        episodes: (data.data.episodes || []).map((e: any) => ({
-                            ...e,
-                            name: jioSaavnService.decodeHtml(e.name),
-                            image: e.image ? jioSaavnService.sanitizeImageUrl(e.image) : null,
-                            type: 'podcast_episode'
-                        }))
-                    };
-                }
-            }
-            return null;
-        } catch (error) {
-            console.error("GetPodcastDetails failed:", error);
-            return null;
-        }
-    },
+
+
 
     deduplicateItems: (items: any[]): any[] => {
         const seen = new Set();

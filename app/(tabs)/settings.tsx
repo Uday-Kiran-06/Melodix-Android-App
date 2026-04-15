@@ -4,8 +4,8 @@ import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Activity, ArrowDownCircle, ChevronRight, Info, LogOut, Moon, Shield, Sun, User, Volume2, Settings as SettingsIcon } from 'lucide-react-native';
-import React from 'react';
-import { ScrollView, Switch, Text, TouchableOpacity, View, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View, Alert } from 'react-native';
 import * as Updates from 'expo-updates';
 
 import { jioSaavnService } from '@/services/jiosaavn';
@@ -16,6 +16,7 @@ export default function SettingsScreen() {
     const { user, signOut } = useAuth();
     const { audioQuality, theme, setTheme } = useSettingsStore();
     const router = useRouter();
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
     const handleSignOut = async () => {
         Alert.alert(
@@ -33,27 +34,41 @@ export default function SettingsScreen() {
 
     const handleCheckForUpdates = async () => {
         if (__DEV__) {
-            Alert.alert("Development Mode", "Updates are not available in development mode.");
+            Alert.alert(
+                "Development Mode",
+                "OTA updates only work in production builds (eas build --profile production). This is a dev/Expo Go session."
+            );
             return;
         }
 
         if (!Updates.isEnabled) {
-            Alert.alert("Updates Disabled", "Over-the-air updates are not enabled for this build.");
+            Alert.alert(
+                "Updates Disabled",
+                "Over-the-air updates are not enabled. Make sure this is a production EAS build with the correct channel."
+            );
             return;
         }
-        
+
+        setIsCheckingUpdate(true);
         try {
             const update = await Updates.checkForUpdateAsync();
             if (update.isAvailable) {
                 Alert.alert(
                     "Update Available",
-                    "A new version of Melodix is available. Would you like to update now?",
+                    "A new version of Melodix is ready. Apply it now?",
                     [
                         { text: "Later", style: "cancel" },
-                        { text: "Update Now", onPress: async () => {
-                            await Updates.fetchUpdateAsync();
-                            await Updates.reloadAsync();
-                        }}
+                        {
+                            text: "Update Now",
+                            onPress: async () => {
+                                try {
+                                    await Updates.fetchUpdateAsync();
+                                    await Updates.reloadAsync();
+                                } catch (fetchErr: any) {
+                                    Alert.alert("Download Failed", fetchErr?.message || "Could not download the update. Check your connection.");
+                                }
+                            }
+                        }
                     ]
                 );
             } else {
@@ -61,8 +76,12 @@ export default function SettingsScreen() {
             }
         } catch (error: any) {
             console.error("Update check failed:", error);
-            const errorMessage = error?.message || "Unknown error";
-            Alert.alert("Update Error", `Failed to check for updates: ${errorMessage}`);
+            Alert.alert(
+                "Update Check Failed",
+                error?.message || "Could not reach the update server. Check your internet connection."
+            );
+        } finally {
+            setIsCheckingUpdate(false);
         }
     };
 
@@ -174,13 +193,20 @@ export default function SettingsScreen() {
                     <GlassCard intensity={15} tint={isDark ? 'dark' : 'light'}>
                         <TouchableOpacity 
                             onPress={handleCheckForUpdates}
+                            disabled={isCheckingUpdate}
+                            activeOpacity={0.7}
                             className={`p-5 flex-row justify-between items-center border-b ${isDark ? 'border-zinc-800/50' : 'border-slate-100'}`}
                         >
                             <View className="flex-row items-center">
-                                <ArrowDownCircle size={18} color={isDark ? "#71717a" : "#64748b"} className="mr-4" />
-                                <Text className={`text-base font-bold ${isDark ? 'text-zinc-300' : 'text-slate-700'}`}>Check for Updates</Text>
+                                <ArrowDownCircle size={18} color={isCheckingUpdate ? ACCENT_COLOR : (isDark ? "#71717a" : "#64748b")} className="mr-4" />
+                                <Text className={`text-base font-bold ${isCheckingUpdate ? 'text-emerald-500' : (isDark ? 'text-zinc-300' : 'text-slate-700')}`}>
+                                    {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
+                                </Text>
                             </View>
-                            <Text className={`text-[10px] font-black ${isDark ? 'text-zinc-600' : 'text-slate-400'} mr-2`}>v1.0.5</Text>
+                            {isCheckingUpdate
+                                ? <ActivityIndicator size="small" color={ACCENT_COLOR} />
+                                : <Text className={`text-[10px] font-black ${isDark ? 'text-zinc-600' : 'text-slate-400'} mr-2`}>v1.0.5</Text>
+                            }
                         </TouchableOpacity>
                         
                         <TouchableOpacity 

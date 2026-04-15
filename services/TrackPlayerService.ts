@@ -87,6 +87,46 @@ export const PlaybackService = async function () {
         }
     });
 
+    // Handle end of queue: load recommendations and resume playback
+    TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async (event) => {
+        console.log('[PlayerService]: Queue ended, loading recommendations...');
+        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const store = usePlayerStore.getState();
+        const lastTrack = store.currentTrack;
+
+        if (!lastTrack?.id) return;
+
+        try {
+            // Load recommendations for the last played track
+            await store.loadRecommendations(lastTrack.id);
+
+            // After recommendations are added, resume playback from the next available track
+            const queue = await TrackPlayer.getQueue();
+            const currentIndex = await TrackPlayer.getActiveTrackIndex();
+            const nextIndex = (currentIndex ?? -1) + 1;
+
+            if (queue.length > nextIndex) {
+                console.log(`[PlayerService]: Resuming from track index ${nextIndex}`);
+                await TrackPlayer.skip(nextIndex);
+                await TrackPlayer.play();
+                store.setIsPlaying(true);
+            }
+        } catch (e) {
+            console.error('[PlayerService]: Failed to continue after queue ended:', e);
+        }
+    });
+
+    // Handle playback errors: skip the broken track instead of stopping
+    TrackPlayer.addEventListener(Event.PlaybackError, async (event) => {
+        console.error('[PlayerService]: Playback error, skipping track:', event);
+        try {
+            await TrackPlayer.skipToNext();
+            await TrackPlayer.play();
+        } catch (e) {
+            console.error('[PlayerService]: Could not skip after playback error:', e);
+        }
+    });
+
     TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const isPlaying = event.state === State.Playing;

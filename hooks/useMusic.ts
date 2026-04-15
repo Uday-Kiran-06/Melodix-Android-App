@@ -15,16 +15,7 @@ export const useInfiniteSongs = (query: string) => {
     });
 };
 
-export const useInfinitePodcasts = () => {
-    return useInfiniteQuery({
-        queryKey: ['infinite-podcasts'],
-        queryFn: ({ pageParam = 1 }) => jioSaavnService.searchPodcasts('top telugu hindi english podcasts', pageParam, 50),
-        getNextPageParam: (lastPage, allPages) => lastPage.length > 0 ? allPages.length + 1 : undefined,
-        initialPageParam: 1,
-        staleTime: 1000 * 60 * 30, // Podcasts stay fresh longer
-        gcTime: 1000 * 60 * 60,
-    });
-};
+
 
 export const useTrending = () => {
     return useQuery({
@@ -135,12 +126,7 @@ export const useFeaturedPlaylists = () => {
     });
 };
 
-export const usePodcasts = () => {
-    return useQuery({
-        queryKey: ['podcasts'],
-        queryFn: () => jioSaavnService.searchPodcasts('top telugu hindi english podcasts')
-    });
-};
+
 
 export const useSmartAlbums = (keywords: string[]) => {
     const query = keywords.length > 0 ? keywords.join(' ') + ' latest telugu albums' : 'latest telugu movie albums 2024';

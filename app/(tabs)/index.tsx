@@ -9,7 +9,6 @@ import {
   useArtistSongs,
   useEnglishHits,
   useFeaturedPlaylists,
-  useInfinitePodcasts,
   useInfiniteSongs,
   useLikedRecommendations,
   useMoodMusic,
@@ -234,9 +233,8 @@ export default function HomeScreen() {
   const likedRecommendationsQuery = useLikedRecommendations(lastLikedSong?.id || null);
   const likedRecommendations = likedRecommendationsQuery.data || [];
 
-  // "Music" & "Podcasts" View Data (Infinite)
+  // "Music" View Data (Infinite)
   const infiniteSongs = useInfiniteSongs('trending telugu songs 2024');
-  const infinitePodcasts = useInfinitePodcasts();
 
   useEffect(() => {
     if (user) fetchLibrary(user.id);
@@ -358,7 +356,7 @@ export default function HomeScreen() {
 
   const renderFilterChips = () => (
     <View className="flex-row px-5 mb-6">
-      {['All', 'Music', 'Podcasts'].map((filter) => (
+      {['All', 'Music'].map((filter) => (
         <TouchableOpacity
           key={filter}
           onPress={() => setActiveFilter(filter)}
@@ -459,22 +457,8 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderPodcastHeader = () => (
-    <View>
-      <View className="px-5 mb-6">
-        <GlassCard intensity={20}>
-          <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-1`}>Explore Podcasts</Text>
-          <Text className="text-zinc-500 text-sm">Discover stories and insights from around the world.</Text>
-        </GlassCard>
-      </View>
-      <View className="px-5 mb-4">
-        <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Recent Episodes</Text>
-      </View>
-    </View>
-  );
-
   if (activeFilter === 'Music') {
-    const data = infiniteSongs.data?.pages.flatMap(page => page) || [];
+    const data = infiniteSongs.data?.pages.flatMap((page: any) => page) || [];
     return (
       <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
         <FlatList
@@ -498,37 +482,6 @@ export default function HomeScreen() {
           onEndReachedThreshold={0.5}
           ListFooterComponent={() => (
             infiniteSongs.isFetchingNextPage ? <ActivityIndicator size="small" color="#10b981" className="py-4" /> : <View className="h-32" />
-          )}
-        />
-      </View>
-    );
-  }
-
-  if (activeFilter === 'Podcasts') {
-    const data = infinitePodcasts.data?.pages.flatMap(page => page) || [];
-    return (
-      <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
-        <FlatList
-          data={data}
-          keyExtractor={(item, index) => item.id + index}
-          renderItem={({ item }) => (
-            <SongListItem 
-               item={item} 
-               onPress={() => item.type === 'podcast' ? router.push(`/podcast/${item.id}` as any) : handleSongPress(item.id)} 
-               onMore={() => setSelectedSongForMenu(item)}
-               isDark={isDark} 
-            />
-          )}
-          ListHeaderComponent={() => (
-            <>
-              {renderHeader()}
-              {renderPodcastHeader()}
-            </>
-          )}
-          onEndReached={() => infinitePodcasts.hasNextPage && infinitePodcasts.fetchNextPage()}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={() => (
-            infinitePodcasts.isFetchingNextPage ? <ActivityIndicator size="small" color="#10b981" className="py-4" /> : <View className="h-32" />
           )}
         />
       </View>

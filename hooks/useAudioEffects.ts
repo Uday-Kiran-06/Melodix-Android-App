@@ -88,31 +88,33 @@ export const useAudioEffects = () => {
 
                 const steps = 20;
                 const stepDelay = (fadeThreshold * 1000) / steps;
+                const targetGain = isLoudnessEnabled ? loudnessGain : 1000;
                 
                 try {
-                    // 1. Fade Out
-                    const startGain = isLoudnessEnabled ? loudnessGain : 1000;
-                    const gainStepOut = startGain / steps;
-                    
-                    for (let i = 1; i <= steps; i++) {
-                        const nextGain = Math.max(0, startGain - (gainStepOut * i));
-                        AudioEffects.setLoudnessGain(Math.round(nextGain));
-                        await new Promise(resolve => setTimeout(resolve, stepDelay));
-                    }
-                    AudioEffects.setLoudnessGain(0);
-                    
-                    // 2. Skip to next track
+                    // 1. Check if there is a next track before fading
                     const queue = await TrackPlayer.getQueue();
                     const index = await TrackPlayer.getActiveTrackIndex();
-                    
-                    // Check again if we are still on the same track before skipping
-                    const currentTrack = await TrackPlayer.getActiveTrack();
-                    if (currentTrack?.id === lastSkipTrackId.current) {
-                        if (index !== undefined && index < queue.length - 1) {
+                    const hasNextTrack = index !== undefined && index < queue.length - 1;
+
+                    // Only fade out if there's a next track to fade into
+                    if (hasNextTrack) {
+                        // 2. Fade Out
+                        const startGain = targetGain;
+                        const gainStepOut = startGain / steps;
+                        
+                        for (let i = 1; i <= steps; i++) {
+                            const nextGain = Math.max(0, startGain - (gainStepOut * i));
+                            AudioEffects.setLoudnessGain(Math.round(nextGain));
+                            await new Promise(resolve => setTimeout(resolve, stepDelay));
+                        }
+                        AudioEffects.setLoudnessGain(0);
+
+                        // 3. Skip to next track (verify we're still on the same track)
+                        const currentTrack = await TrackPlayer.getActiveTrack();
+                        if (currentTrack?.id === lastSkipTrackId.current) {
                             await TrackPlayer.skipToNext();
                             
-                            // 3. Fade In
-                            const targetGain = isLoudnessEnabled ? loudnessGain : 1000;
+                            // 4. Fade In
                             const gainStepIn = targetGain / steps;
                             
                             AudioEffects.setEnabled('loudness', true);
@@ -125,14 +127,21 @@ export const useAudioEffects = () => {
                             }
                             AudioEffects.setLoudnessGain(targetGain);
                             
-                            // 4. Restore original loudness enabled state if it was off
+                            // 5. Restore original loudness enabled state if it was off
                             if (!isLoudnessEnabled) {
                                 AudioEffects.setEnabled('loudness', false);
                             }
+                        } else {
+                            // Track changed under us — restore volume
+                            AudioEffects.setLoudnessGain(targetGain);
+                            if (!isLoudnessEnabled) AudioEffects.setEnabled('loudness', false);
                         }
                     }
+                    // If no next track, do nothing — let TrackPlayer's natural end event handle it
                 } catch (e) {
                     console.error('Crossfade failed:', e);
+                    // Safety: always restore volume on error
+                    try { AudioEffects.setLoudnessGain(targetGain); } catch (_) {}
                 } finally {
                     // Stay in transitioning state for a bit to allow the next track to settle
                     setTimeout(() => {
