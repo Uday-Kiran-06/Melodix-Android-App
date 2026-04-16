@@ -29,6 +29,7 @@ interface PlayerState {
     isLoadingLyrics: boolean;
     isRehydrated: boolean;
     lastPosition: number; // seconds
+    sleepTimerDeadline: number | null;
     setLastPosition: (position: number) => void;
     setCurrentTrack: (track: Track | null) => void;
     setIsPlaying: (playing: boolean) => void;
@@ -110,6 +111,7 @@ export const usePlayerStore = create<PlayerState>()(
             isLoadingLyrics: false,
             isRehydrated: false,
             lastPosition: 0,
+            sleepTimerDeadline: null,
             
             setLastPosition: (position) => set({ lastPosition: position }),
 
@@ -411,21 +413,22 @@ export const usePlayerStore = create<PlayerState>()(
                 }
 
                 if (minutes === null) {
-                    set({ sleepTimer: null, remainingTime: null });
+                    set({ sleepTimer: null, remainingTime: null, sleepTimerDeadline: null });
                     return;
                 }
 
+                const deadline = Date.now() + (minutes * 60 * 1000);
                 const totalSeconds = minutes * 60;
-                set({ sleepTimer: minutes, remainingTime: totalSeconds });
+                set({ sleepTimer: minutes, remainingTime: totalSeconds, sleepTimerDeadline: deadline });
 
                 // Use a more robust interval that checks the store state
                 timerInterval = setInterval(() => {
                     const state = usePlayerStore.getState();
-                    const { remainingTime, isPlaying } = state;
+                    const { remainingTime, isPlaying, sleepTimerDeadline } = state;
 
-                    if (remainingTime !== null && remainingTime > 0) {
-                        set({ remainingTime: remainingTime - 1 });
-                    } else {
+                    // Accuracy check: If we're past the deadline, stop now regardless of remainingTime
+                    const now = Date.now();
+                    if (sleepTimerDeadline && now >= sleepTimerDeadline) {
                         if (timerInterval) {
                             clearInterval(timerInterval);
                             timerInterval = null;
@@ -435,11 +438,16 @@ export const usePlayerStore = create<PlayerState>()(
                             TrackPlayer.pause();
                             set({ isPlaying: false });
                         }
-                        set({ sleepTimer: null, remainingTime: null });
+                        set({ sleepTimer: null, remainingTime: null, sleepTimerDeadline: null });
 
                         try {
                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         } catch (e) { }
+                        return;
+                    }
+
+                    if (remainingTime !== null && remainingTime > 0) {
+                        set({ remainingTime: remainingTime - 1 });
                     }
                 }, 1000);
             },
@@ -489,10 +497,17 @@ export const usePlayerStore = create<PlayerState>()(
                     console.error("[Player]: Failed to sync state during init", e);
                 }
 
-                // Reconstruct Sleep Timer if it was active
-                if (sleepTimer !== null) {
-                    console.log(`[Player]: Reconstructing sleep timer for ${sleepTimer}m`);
-                    setSleepTimer(sleepTimer);
+                // Reconstruct Sleep Timer if it hasn't expired
+                if (sleepTimer !== null && get().sleepTimerDeadline) {
+                    const timeRemainingMs = get().sleepTimerDeadline! - Date.now();
+                    if (timeRemainingMs > 0) {
+                        const minutesRemaining = Math.ceil(timeRemainingMs / (1000 * 60));
+                        console.log(`[Player]: Reconstructing sleep timer for ${minutesRemaining} minutes remaining`);
+                        get().setSleepTimer(minutesRemaining);
+                    } else {
+                        console.log(`[Player]: Cleaned up expired sleep timer`);
+                        set({ sleepTimer: null, remainingTime: null, sleepTimerDeadline: null });
+                    }
                 }
 
                 // Load lyrics for the restored track on restart
@@ -656,6 +671,7 @@ export const usePlayerStore = create<PlayerState>()(
                 repeatMode: state.repeatMode,
                 lastPosition: state.lastPosition,
                 sleepTimer: state.sleepTimer,
+                sleepTimerDeadline: state.sleepTimerDeadline,
             }),
             onRehydrateStorage: (state) => {
                 return (rehydratedState, error) => {

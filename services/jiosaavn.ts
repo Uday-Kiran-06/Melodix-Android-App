@@ -62,7 +62,7 @@ const safeParseJson = async (response: Response) => {
 };
 
 export const jioSaavnService = {
-    checkConnection: async (): Promise<boolean> => {
+    checkConnectivity: async (): Promise<boolean> => {
         try {
             const response = await fetchWithTimeout("https://www.google.com", {
                 method: "HEAD",

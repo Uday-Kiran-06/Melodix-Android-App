@@ -254,8 +254,8 @@ export default function HomeScreen() {
   const likedRecommendationsQuery = useLikedRecommendations(lastLikedSong?.id || null);
   const likedRecommendations = likedRecommendationsQuery.data || [];
 
-  // "Music" View Data (Infinite)
-  const infiniteSongs = useInfiniteSongs('trending telugu songs 2024');
+  const { getPreferredLanguages } = useHistoryStore();
+  const infiniteSongs = useInfiniteSongs(`trending ${getPreferredLanguages().split(',')[0]} songs`);
 
   useEffect(() => {
     if (user) fetchLibrary(user.id);
@@ -515,6 +515,14 @@ export default function HomeScreen() {
           ListFooterComponent={() => (
             infiniteSongs.isFetchingNextPage ? <ActivityIndicator size="small" color="#10b981" className="py-4" /> : <View className="h-32" />
           )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#10b981"
+              colors={['#10b981']}
+            />
+          }
         />
       </View>
     );
