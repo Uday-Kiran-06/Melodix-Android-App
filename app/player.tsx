@@ -791,7 +791,7 @@ export default function PlayerScreen() {
                                 {currentTrack && (
                                     <TouchableOpacity
                                         onPress={() => {
-                                            if (currentTrack.id) loadRecommendations(currentTrack.id);
+                                            if (currentTrack.id) loadRecommendations(currentTrack.id, true);
                                         }}
                                         disabled={isLoadingRecommendations}
                                         style={{ borderColor: DesignSystem.colors.primary }}

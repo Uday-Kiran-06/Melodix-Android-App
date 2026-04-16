@@ -7,6 +7,15 @@ export const PlaybackService = async function () {
     TrackPlayer.addEventListener(Event.RemotePrevious, () => { console.log('RemotePrevious'); TrackPlayer.skipToPrevious(); });
     TrackPlayer.addEventListener(Event.RemoteStop, async () => { 
         console.log('RemoteStop'); 
+        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const store = usePlayerStore.getState();
+        
+        // Capture final position before reset
+        try {
+            const pos = await TrackPlayer.getPosition();
+            if (pos > 0) store.setLastPosition(pos);
+        } catch (e) {}
+
         await TrackPlayer.stop();
         await TrackPlayer.reset(); 
     });
@@ -30,18 +39,27 @@ export const PlaybackService = async function () {
             await TrackPlayer.play();
         }
     });
+    let wasPlayingBeforeDuck = false;
     TrackPlayer.addEventListener(Event.RemoteDuck, async (event) => {
+        console.log('[PlayerService]: RemoteDuck event:', event);
         if (event.permanent) {
             await TrackPlayer.pause();
+            wasPlayingBeforeDuck = false;
         } else {
             if (event.paused) {
+                // Focus lost or ducking started
+                const state = await TrackPlayer.getState();
+                wasPlayingBeforeDuck = state === State.Playing;
                 await TrackPlayer.pause();
             } else {
-                // Rely on native ducking for transient interruptions
-                const state = await TrackPlayer.getState();
-                if (state !== State.Playing) {
-                    await TrackPlayer.play();
+                // Focus returned
+                if (wasPlayingBeforeDuck) {
+                    const state = await TrackPlayer.getState();
+                    if (state !== State.Playing) {
+                        await TrackPlayer.play();
+                    }
                 }
+                wasPlayingBeforeDuck = false;
             }
         }
     });
@@ -77,7 +95,7 @@ export const PlaybackService = async function () {
                 const index = event.index;
                 const queue = await TrackPlayer.getQueue();
                 const remaining = queue.length - ((index ?? 0) + 1);
-                if (remaining <= 5 && event.track.id) {
+                if (remaining <= 5 && event.track.id && store.repeatMode === 'off') {
                     console.log(`[PlayerService]: Only ${remaining} tracks left, topping up queue...`);
                     store.loadRecommendations(event.track.id);
                 }
@@ -92,9 +110,17 @@ export const PlaybackService = async function () {
 
     // Handle end of queue: load recommendations and resume playback
     TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async (event) => {
-        console.log('[PlayerService]: Queue ended, loading recommendations...');
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
+
+        // REPEAT GUARD: If repeat is active, let native TrackPlayer looping handle it.
+        // We only want to manually load recommendations and skip forward if repeat is OFF.
+        if (store.repeatMode !== 'off') {
+            console.log(`[PlayerService]: Queue ended with repeat: ${store.repeatMode}, ignoring manual recommendation load.`);
+            return;
+        }
+
+        console.log('[PlayerService]: Queue ended, loading recommendations...');
         const lastTrack = store.currentTrack;
 
         if (!lastTrack?.id) return;
@@ -134,5 +160,17 @@ export const PlaybackService = async function () {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const isPlaying = event.state === State.Playing;
         usePlayerStore.getState().setIsPlaying(isPlaying);
+    });
+
+    let lastSavedSecond = 0;
+    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (event) => {
+        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const currentSecond = Math.floor(event.position);
+        
+        // Save position every 10 seconds or on track boundary
+        if (currentSecond !== lastSavedSecond && currentSecond % 10 === 0) {
+            lastSavedSecond = currentSecond;
+            usePlayerStore.getState().setLastPosition(event.position);
+        }
     });
 };

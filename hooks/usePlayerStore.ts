@@ -28,6 +28,8 @@ interface PlayerState {
     plainLyrics: string | null;
     isLoadingLyrics: boolean;
     isRehydrated: boolean;
+    lastPosition: number; // seconds
+    setLastPosition: (position: number) => void;
     setCurrentTrack: (track: Track | null) => void;
     setIsPlaying: (playing: boolean) => void;
     setShuffle: (shuffle: boolean) => void;
@@ -107,6 +109,9 @@ export const usePlayerStore = create<PlayerState>()(
             plainLyrics: null,
             isLoadingLyrics: false,
             isRehydrated: false,
+            lastPosition: 0,
+            
+            setLastPosition: (position) => set({ lastPosition: position }),
 
             clearRecommendationHistory: () => {
                 sessionRecommendedIds.clear();
@@ -116,11 +121,15 @@ export const usePlayerStore = create<PlayerState>()(
             setCurrentTrack: (track) => set({ currentTrack: track }),
             setIsPlaying: (playing) => set({ isPlaying: playing }),
             setShuffle: (shuffle) => set({ shuffle }),
-            setRepeatMode: (mode) => {
+            setRepeatMode: async (mode) => {
                 set({ repeatMode: mode });
-                if (mode === 'track') TrackPlayer.setRepeatMode(RepeatMode.Track);
-                else if (mode === 'queue') TrackPlayer.setRepeatMode(RepeatMode.Queue);
-                else TrackPlayer.setRepeatMode(RepeatMode.Off);
+                try {
+                    if (mode === 'track') await TrackPlayer.setRepeatMode(RepeatMode.Track);
+                    else if (mode === 'queue') await TrackPlayer.setRepeatMode(RepeatMode.Queue);
+                    else await TrackPlayer.setRepeatMode(RepeatMode.Off);
+                } catch (e) {
+                    console.error("[Player]: Failed to set repeat mode", e);
+                }
             },
 
             playTrack: async (trackData: any, queueData: any[] = [], quality?: keyof typeof qualityMap) => {
@@ -215,6 +224,13 @@ export const usePlayerStore = create<PlayerState>()(
                 }
 
                 await TrackPlayer.reset();
+
+                // Re-sync repeat mode after reset, as reset often clears it
+                const { repeatMode } = get();
+                if (repeatMode === 'track') await TrackPlayer.setRepeatMode(RepeatMode.Track);
+                else if (repeatMode === 'queue') await TrackPlayer.setRepeatMode(RepeatMode.Queue);
+                else await TrackPlayer.setRepeatMode(RepeatMode.Off);
+
                 if (queueToPlay.length > 0) {
                     await TrackPlayer.add(queueToPlay);
                     const index = queueToPlay.findIndex(t => t.id === trackToPlay.id);
@@ -334,15 +350,15 @@ export const usePlayerStore = create<PlayerState>()(
                 }
             },
 
-            nextRepeatMode: () => {
+            nextRepeatMode: async () => {
                 const { repeatMode } = get();
                 try {
-                    Haptics.selectionAsync();
+                    await Haptics.selectionAsync();
                 } catch (e) { }
                 const modes: ('off' | 'track' | 'queue')[] = ['off', 'track', 'queue'];
                 const nextIdx = (modes.indexOf(repeatMode) + 1) % modes.length;
                 const nextMode = modes[nextIdx];
-                get().setRepeatMode(nextMode);
+                await get().setRepeatMode(nextMode);
             },
 
             togglePlayback: async () => {
@@ -457,20 +473,44 @@ export const usePlayerStore = create<PlayerState>()(
                     set({ isPlaying: false });
                 }
 
+                // Re-sync repeat mode on initialization
+                const { repeatMode, lastPosition, setSleepTimer, sleepTimer } = get();
+                try {
+                    if (repeatMode === 'track') await TrackPlayer.setRepeatMode(RepeatMode.Track);
+                    else if (repeatMode === 'queue') await TrackPlayer.setRepeatMode(RepeatMode.Queue);
+                    else await TrackPlayer.setRepeatMode(RepeatMode.Off);
+                    
+                    // Restore position if it was saved
+                    if (lastPosition > 0) {
+                        console.log(`[Player]: Resuming position at ${lastPosition}s`);
+                        await TrackPlayer.seekTo(lastPosition);
+                    }
+                } catch (e) {
+                    console.error("[Player]: Failed to sync state during init", e);
+                }
+
+                // Reconstruct Sleep Timer if it was active
+                if (sleepTimer !== null) {
+                    console.log(`[Player]: Reconstructing sleep timer for ${sleepTimer}m`);
+                    setSleepTimer(sleepTimer);
+                }
+
                 // Load lyrics for the restored track on restart
                 if (currentTrack) {
                     get().loadLyrics(currentTrack);
                 }
             },
 
-            loadRecommendations: async (songId: string) => {
+            loadRecommendations: async (songId: string, isManual: boolean = false) => {
                 // Module-level re-entrancy guard + debounce
                 const now = Date.now();
                 if (isRecommendationInProgress) {
                     console.log('[Player]: loadRecommendations skipped — already in progress');
                     return;
                 }
-                if (now - lastRecommendationTime < RECOMMENDATION_DEBOUNCE_MS) {
+                
+                // Only debounce automated requests; allow manual clicks to bypass
+                if (!isManual && now - lastRecommendationTime < RECOMMENDATION_DEBOUNCE_MS) {
                     console.log('[Player]: loadRecommendations debounced');
                     return;
                 }
@@ -480,42 +520,32 @@ export const usePlayerStore = create<PlayerState>()(
                 set({ isLoadingRecommendations: true });
 
                 try {
-                    // Build multi-seed from current song + up to 2 recent history tracks
-                    const seeds: string[] = [songId];
-                    try {
-                        const { useHistoryStore } = require('./useHistoryStore');
-                        const recentTracks: any[] = useHistoryStore.getState().recentlyPlayedTracks || [];
-                        const historySeedIds = recentTracks
-                            .filter(t => t.id && String(t.id) !== songId)
-                            .slice(0, 2)
-                            .map(t => String(t.id));
-                        seeds.push(...historySeedIds);
-                    } catch (e) {
-                        console.warn('[Player]: Could not load history seeds:', e);
-                    }
+                    const selectedQuality = useSettingsStore.getState().audioQuality;
+                    const { useHistoryStore } = require('./useHistoryStore');
+                    const recentItems: any[] = useHistoryStore.getState().recentlyPlayedItems || [];
+                    const historySongs = recentItems.filter(i => (i.type === 'song' || !i.type) && i.id);
 
-                    console.log(`[Player]: loadRecommendations with ${seeds.length} seeds:`, seeds);
-                    const recommendations = await jioSaavnService.getMultiSeedRecommendations(seeds);
+                    const runVibeMatch = async (seeds: string[], strictDedup: boolean) => {
+                        console.log(`[Player]: Vibe Match with ${seeds.length} seeds (strict: ${strictDedup}):`, seeds);
+                        const recommendations = await jioSaavnService.getMultiSeedRecommendations(seeds);
+                        if (!recommendations || recommendations.length === 0) return [];
 
-                    if (recommendations && recommendations.length > 0) {
                         const existingIds = new Set(get().queue.map(t => t.id));
-                        const selectedQuality = useSettingsStore.getState().audioQuality;
-
-                        const recommendedTracks: Track[] = recommendations
+                        return recommendations
                             .filter((item: any) => {
                                 const id = String(item.id);
-                                return !existingIds.has(id) && !sessionRecommendedIds.has(id);
+                                // ALWAYS strict dedup against the actual queue (no duplicates allowed)
+                                if (existingIds.has(id)) return false;
+                                // Session-level dedup: skip songs seen in this session UNLESS we're in manual rescue mode
+                                if (strictDedup && sessionRecommendedIds.has(id)) return false;
+                                return true;
                             })
-                            .slice(0, 12) // Top-up with max 12 at a time
                             .map((item: any) => ({
                                 id: String(item.id),
                                 url: getTrackUrl(item, selectedQuality),
                                 title: cleanMetadata(item.name || item.title, "Unknown Track"),
                                 artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
-                                artwork: cleanMetadata(
-                                    sanitizeImageUrl(item.image || item.artwork),
-                                    undefined
-                                ),
+                                artwork: cleanMetadata(sanitizeImageUrl(item.image || item.artwork), undefined),
                                 album: cleanMetadata(item.album?.name || item.album, "Single"),
                                 description: cleanMetadata(item.name || item.title, "Unknown Track"),
                                 genre: cleanMetadata(item.language, "Music"),
@@ -528,19 +558,44 @@ export const usePlayerStore = create<PlayerState>()(
                                 // @ts-ignore
                                 originalUrl: item.url
                             }));
+                    };
 
-                        if (recommendedTracks.length > 0) {
-                            recommendedTracks.forEach(t => sessionRecommendedIds.add(t.id));
-                            await TrackPlayer.add(recommendedTracks);
-                            set((state) => ({
-                                queue: [...state.queue, ...recommendedTracks],
-                                originalQueue: [...state.originalQueue, ...recommendedTracks]
-                            }));
-                            console.log(`[Player]: Added ${recommendedTracks.length} recommended tracks to queue`);
-                        }
+                    // PASS 1: High Accuracy (Current Track + Recent History)
+                    const seeds1 = [songId, ...historySongs.slice(0, 2).map(t => String(t.id))].filter(Boolean);
+                    let recommendedTracks = await runVibeMatch(seeds1, true);
+
+                    // PASS 2: Seed Rotation (Manual Rescue Mode)
+                    // If manual and no new tracks found, rotate seeds deeper into history and relax session dedup
+                    if (isManual && recommendedTracks.length < 5 && historySongs.length > 2) {
+                        console.log('[Player]: Low results, starting Seed Rotation (Pass 2)...');
+                        const seeds2 = [songId, ...historySongs.slice(2, 5).map(t => String(t.id))].filter(Boolean);
+                        const extraTracks = await runVibeMatch(seeds2, true);
+                        recommendedTracks = [...new Map([...recommendedTracks, ...extraTracks].map(t => [t.id, t])).values()];
+                    }
+
+                    // PASS 3: Session Dedup Relaxation (Manual Rescue Mode)
+                    // If still low, allow songs seen previously in this session (but NOT in queue)
+                    if (isManual && recommendedTracks.length < 3) {
+                        console.log('[Player]: Still low, relaxing session dedup (Pass 3)...');
+                        const seeds3 = [songId, ...historySongs.slice(0, 3).map(t => String(t.id))].filter(Boolean);
+                        const desperateTracks = await runVibeMatch(seeds3, false);
+                        recommendedTracks = [...new Map([...recommendedTracks, ...desperateTracks].map(t => [t.id, t])).values()];
+                    }
+
+                    if (recommendedTracks.length > 0) {
+                        const tracksToAdd = recommendedTracks.slice(0, 12);
+                        tracksToAdd.forEach(t => sessionRecommendedIds.add(t.id));
+                        await TrackPlayer.add(tracksToAdd);
+                        set((state) => ({
+                            queue: [...state.queue, ...tracksToAdd],
+                            originalQueue: [...state.originalQueue, ...tracksToAdd]
+                        }));
+                        console.log(`[Player]: Successfully added ${tracksToAdd.length} Vibe Match tracks`);
+                    } else if (isManual) {
+                        console.log('[Player]: Vibe Match exhausted — no new tracks found even after rotation');
                     }
                 } catch (e) {
-                    console.error("Failed to load recommendations:", e);
+                    console.error("Vibe Match failed:", e);
                 } finally {
                     set({ isLoadingRecommendations: false });
                     isRecommendationInProgress = false;
@@ -599,6 +654,8 @@ export const usePlayerStore = create<PlayerState>()(
                 originalQueue: state.originalQueue,
                 shuffle: state.shuffle,
                 repeatMode: state.repeatMode,
+                lastPosition: state.lastPosition,
+                sleepTimer: state.sleepTimer,
             }),
             onRehydrateStorage: (state) => {
                 return (rehydratedState, error) => {

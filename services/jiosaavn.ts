@@ -90,9 +90,34 @@ export const jioSaavnService = {
      */
     decodeHtml: (text: string): string => {
         if (!text) return "";
-        return decodeHtml(text)
-            .replace(/\(From.*?\)/g, "") // Remove "(From ...)" text
+
+        let cleaned = decodeHtml(text);
+
+        // Remove unwanted "From" metadata blocks (case-insensitive)
+        cleaned = cleaned
+            .replace(/\(From.*?\)/gi, "")
+            .replace(/\[From.*?\]/gi, "")
             .trim();
+
+        // Fix unmatched or multiple trailing brackets
+        const openCount = (cleaned.match(/\(/g) || []).length;
+        const closeCount = (cleaned.match(/\)/g) || []).length;
+
+        if (closeCount > openCount) {
+            // Normalize multiple trailing brackets into a single one
+            cleaned = cleaned.replace(/\)+$/g, (match) => {
+                return match.length > 1 ? ")" : match;
+            });
+            
+            // Re-check after normalization
+            const newCloseCount = (cleaned.match(/\)/g) || []).length;
+            if (newCloseCount > openCount) {
+              // If still unbalanced (e.g. no opening bracket at all), remove them
+              cleaned = cleaned.replace(/\)+$/g, "");
+            }
+        }
+
+        return cleaned.trim();
     },
 
     /**

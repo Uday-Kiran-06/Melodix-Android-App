@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useSettingsStore } from './useSettingsStore';
 import * as AudioEffects from '../modules/native-audio-effects';
 import TrackPlayer, { useProgress, State, usePlaybackState } from 'react-native-track-player';
+import { usePlayerStore } from './usePlayerStore';
 
 export const useAudioEffects = () => {
     const {
@@ -71,9 +72,13 @@ export const useAudioEffects = () => {
 
     const lastSkipTrackId = useRef<string | null>(null);
 
+    const { repeatMode } = usePlayerStore();
+
     // Crossfade Logic
     useEffect(() => {
-        if (!crossfadeEnabled || !isPlaying || duration <= 0 || isTransitioning.current) return;
+        // Disable crossfade if Repeat Track is enabled, as native TrackPlayer looping 
+        // doesn't support crossfading into the same track via manual skipToNext().
+        if (!crossfadeEnabled || repeatMode === 'track' || !isPlaying || duration <= 0 || isTransitioning.current) return;
 
         const timeLeft = duration - position;
         const fadeThreshold = crossfadeDuration;
@@ -94,7 +99,9 @@ export const useAudioEffects = () => {
                     // 1. Check if there is a next track before fading
                     const queue = await TrackPlayer.getQueue();
                     const index = await TrackPlayer.getActiveTrackIndex();
-                    const hasNextTrack = index !== undefined && index < queue.length - 1;
+                    
+                    // Respect repeatMode: 'queue' loops around, but 'off' ends at queue.length - 1
+                    const hasNextTrack = index !== undefined && (index < queue.length - 1 || repeatMode === 'queue');
 
                     // Only fade out if there's a next track to fade into
                     if (hasNextTrack) {
@@ -112,7 +119,11 @@ export const useAudioEffects = () => {
                         // 3. Skip to next track (verify we're still on the same track)
                         const currentTrack = await TrackPlayer.getActiveTrack();
                         if (currentTrack?.id === lastSkipTrackId.current) {
-                            await TrackPlayer.skipToNext();
+                            if (index === queue.length - 1 && repeatMode === 'queue') {
+                                await TrackPlayer.skip(0);
+                            } else {
+                                await TrackPlayer.skipToNext();
+                            }
                             
                             // 4. Fade In
                             const gainStepIn = targetGain / steps;
@@ -158,5 +169,5 @@ export const useAudioEffects = () => {
             isTransitioning.current = false;
         }
 
-    }, [position, duration, isPlaying, crossfadeEnabled, crossfadeDuration, isLoudnessEnabled, loudnessGain]);
+    }, [position, duration, isPlaying, crossfadeEnabled, crossfadeDuration, isLoudnessEnabled, loudnessGain, repeatMode]);
 };
