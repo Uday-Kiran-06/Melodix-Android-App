@@ -23,13 +23,14 @@ import {
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { MoreVertical } from 'lucide-react-native';
+import { MoreVertical, RefreshCcw } from 'lucide-react-native';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -160,10 +161,29 @@ export default function HomeScreen() {
   const { fetchLibrary, likedSongs = [] } = useLibraryStore();
   const { theme, audioQuality } = useSettingsStore();
   const { playTrack } = usePlayerStore();
-  const { recentlyPlayedItems = [], recentKeywords: searchHistory = [] } = useHistoryStore();
+  const { recentlyPlayedItems = [], recentKeywords = [], searchHistory = [] } = useHistoryStore();
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const isDark = theme === 'dark';
+
+  const shuffleArray = (array: any[]) => {
+    if (!array) return [];
+    const newArr = [...array];
+    for (let i = newArr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+    }
+    return newArr;
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await queryClient.refetchQueries();
+    setRefreshing(false);
+  }, [queryClient]);
 
   const quickAccessData = useMemo(() => {
     if (recentlyPlayedItems.length > 0) {
@@ -188,10 +208,10 @@ export default function HomeScreen() {
 
   // Data Queries
   const trendingQuery = useTrending();
-  const trending = trendingQuery.data || [];
+  const trending = useMemo(() => shuffleArray(trendingQuery.data || []).slice(0, 20), [trendingQuery.data]);
 
   const newReleasesQuery = useNewReleases();
-  const newReleases = newReleasesQuery.data || [];
+  const newReleases = useMemo(() => shuffleArray(newReleasesQuery.data || []).slice(0, 20), [newReleasesQuery.data]);
 
   const smartRecommendationsQuery = useSmartRecommendations(searchHistory);
   const smartRecommendations = smartRecommendationsQuery.data || [];
@@ -199,8 +219,9 @@ export default function HomeScreen() {
   const smartAlbumsQuery = useSmartAlbums(searchHistory);
   const smartAlbums = smartAlbumsQuery.data || [];
 
-  const artistSongsQuery = useArtistSongs('Devi Sri Prasad');
-  const artistSongs = artistSongsQuery.data || [];
+  const personalizedArtist = useMemo(() => recentKeywords[0] || 'Arijit Singh', [recentKeywords]);
+  const artistSongsQuery = useArtistSongs(personalizedArtist);
+  const artistSongs = useMemo(() => shuffleArray(artistSongsQuery.data || []).slice(0, 10), [artistSongsQuery.data]);
 
   const featuredPlaylistsQuery = useFeaturedPlaylists();
   const featuredPlaylists = featuredPlaylistsQuery.data || [];
@@ -276,7 +297,7 @@ export default function HomeScreen() {
     { type: 'section', id: 'liked_recommendations', title: 'Recommended for You', data: likedRecommendations, enabled: likedRecommendations.length > 0 || likedRecommendationsQuery.isLoading, isLoading: likedRecommendationsQuery.isLoading },
     { type: 'section', id: 'new_releases', title: 'New Releases', data: newReleases, isLoading: newReleasesQuery.isLoading },
     { type: 'section', id: 'smart_recommendations', title: 'Based on your Search', data: smartRecommendations, enabled: smartRecommendations.length > 0 || smartRecommendationsQuery.isLoading, isLoading: smartRecommendationsQuery.isLoading },
-    { type: 'section', id: 'artist_songs', title: 'Top Hits by DSP', data: artistSongs, isLoading: artistSongsQuery.isLoading },
+    { type: 'section', id: 'artist_songs', title: `Top Hits by ${personalizedArtist}`, data: artistSongs, isLoading: artistSongsQuery.isLoading },
     { type: 'section', id: 'featured_playlists', title: 'Popular Playlists', data: featuredPlaylists, isLoading: featuredPlaylistsQuery.isLoading },
     { type: 'section', id: 'movie_albums', title: 'New Movie Albums', data: movieAlbums, isLoading: movieAlbumsQuery.isLoading },
     { type: 'section', id: 'english_hits', title: 'English Pop Hits', data: englishHits, isLoading: englishHitsQuery.isLoading },
@@ -286,6 +307,7 @@ export default function HomeScreen() {
     { type: 'section', id: 'retro', title: 'Retro Classics', data: retroTelugu, isLoading: retroTeluguQuery.isLoading },
     { type: 'section', id: 'happy', title: 'Happy Vibes', data: happySongs, isLoading: happySongsQuery.isLoading },
     { type: 'section', id: 'singles', title: 'Latest Singles', data: singlesSongs, isLoading: singlesSongsQuery.isLoading },
+    { type: 'section', id: 'all_trending', title: 'Trending Telugu', data: infiniteSongs.data?.pages[0]?.slice(0, 15), isLoading: infiniteSongs.isLoading },
   ].filter(s => s.enabled !== false), [
     trending, trendingQuery.isLoading,
     likedRecommendations, likedRecommendationsQuery.isLoading,
@@ -300,7 +322,9 @@ export default function HomeScreen() {
     romanticSongs, romanticSongsQuery.isLoading,
     retroTelugu, retroTeluguQuery.isLoading,
     happySongs, happySongsQuery.isLoading,
-    singlesSongs, singlesSongsQuery.isLoading
+    singlesSongs, singlesSongsQuery.isLoading,
+    infiniteSongs.data, infiniteSongs.isLoading,
+    personalizedArtist
   ]);
 
   const HorizontalSection = memo(({ title, data, isDark, type = 'square' }: any) => (
@@ -435,27 +459,35 @@ export default function HomeScreen() {
     }
   }, [isDark, currentGreeting, gridItems, handleSongPress, router]);
 
-  const renderMusicHeader = () => (
-    <View>
-      <View className="mb-8">
-        <SectionHeader title="Featured Artists" isDark={isDark} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-          {['Devi Sri Prasad', 'Anirudh Ravichander', 'S. Thaman', 'Sid Sriram'].map((artist: string, index: number) => (
-            <SongCard
-              key={index}
-              item={{ name: artist, image: [{ url: `https://ui-avatars.com/api/?name=${artist}&background=10b981&color=fff` }] }}
-              onPress={() => handleSearchPress(artist)}
-              isDark={isDark}
-              type="circle"
-            />
-          ))}
-        </ScrollView>
-      </View>
-      <View className="px-5 mb-4">
-        <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Popular Tracks</Text>
-      </View>
-    </View>
-  );
+  const renderMusicHeader = () => {
+    const featuredArtists = useMemo(() => {
+        const historyArtists = recentKeywords.slice(0, 4);
+        const defaults = ['Sid Sriram', 'Anirudh Ravichander', 'Arijit Singh', 'Taylor Swift'];
+        return Array.from(new Set([...historyArtists, ...defaults])).slice(0, 4);
+    }, [recentKeywords]);
+
+    return (
+        <View>
+          <View className="mb-8">
+            <SectionHeader title="Your Artists" isDark={isDark} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
+              {featuredArtists.map((artist: string, index: number) => (
+                <SongCard
+                  key={index}
+                  item={{ name: artist, image: [{ url: `https://ui-avatars.com/api/?name=${artist}&background=10b981&color=fff` }] }}
+                  onPress={() => handleSearchPress(artist)}
+                  isDark={isDark}
+                  type="circle"
+                />
+              ))}
+            </ScrollView>
+          </View>
+          <View className="px-5 mb-4">
+            <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Popular Tracks</Text>
+          </View>
+        </View>
+    );
+  };
 
   if (activeFilter === 'Music') {
     const data = infiniteSongs.data?.pages.flatMap((page: any) => page) || [];
@@ -501,6 +533,14 @@ export default function HomeScreen() {
         maxToRenderPerBatch={4}
         windowSize={5}
         removeClippedSubviews={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#10b981"
+            colors={['#10b981']}
+          />
+        }
       />
       <SongMenu 
         isVisible={!!selectedSongForMenu} 

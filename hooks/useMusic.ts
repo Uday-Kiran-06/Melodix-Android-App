@@ -57,8 +57,8 @@ export const useSearchPlaylists = (query: string) => {
 export const useNewReleases = () => {
     return useQuery({
         queryKey: ['new-releases'],
-        queryFn: () => jioSaavnService.searchSongs('latest telugu new releases 2024'),
-        staleTime: 1000 * 60 * 60, // Once an hour is enough
+        queryFn: () => jioSaavnService.searchSongs('latest telugu new releases'),
+        staleTime: 1000 * 60 * 30, // 30 minutes
     });
 };
 
@@ -111,9 +111,9 @@ export const useHomeModules = () => {
 export const useMovieAlbums = () => {
     return useQuery({
         queryKey: ['movie-albums'],
-        queryFn: () => jioSaavnService.searchAlbums('latest telugu movie albums 2024'),
-        staleTime: 1000 * 60 * 60 * 6,
-        gcTime: 1000 * 60 * 60 * 48,
+        queryFn: () => jioSaavnService.searchAlbums('latest telugu movie albums'),
+        staleTime: 1000 * 60 * 60 * 3,
+        gcTime: 1000 * 60 * 60 * 24,
     });
 };
 
@@ -141,9 +141,9 @@ export const useSmartAlbums = (keywords: string[]) => {
 export const useEnglishHits = () => {
     return useQuery({
         queryKey: ['english-hits'],
-        queryFn: () => jioSaavnService.searchSongs('top english pop hits 2024', 'english'),
-        staleTime: 1000 * 60 * 60 * 12,
-        gcTime: 1000 * 60 * 60 * 48,
+        queryFn: () => jioSaavnService.searchSongs('top english pop hits billboard', 'english'),
+        staleTime: 1000 * 60 * 60 * 6,
+        gcTime: 1000 * 60 * 60 * 24,
     });
 };
 
