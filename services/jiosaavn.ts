@@ -117,6 +117,9 @@ export const jioSaavnService = {
             }
         }
 
+        // Strip stray leading/trailing double quotes (e.g., from decoded &quot; entities)
+        cleaned = cleaned.replace(/^"+|"+$/g, '');
+
         return cleaned.trim();
     },
 
@@ -690,12 +693,4 @@ export const jioSaavnService = {
         }
     },
 
-    checkConnectivity: async () => {
-        try {
-            const response = await fetchWithTimeout("https://www.google.com", { method: 'HEAD' }, 3000);
-            return response.ok;
-        } catch (e) {
-            return false;
-        }
-    },
 };

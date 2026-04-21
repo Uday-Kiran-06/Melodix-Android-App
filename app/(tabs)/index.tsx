@@ -213,10 +213,14 @@ export default function HomeScreen() {
   const newReleasesQuery = useNewReleases();
   const newReleases = useMemo(() => shuffleArray(newReleasesQuery.data || []).slice(0, 20), [newReleasesQuery.data]);
 
-  const smartRecommendationsQuery = useSmartRecommendations(searchHistory);
+  const combinedHistory = useMemo(() => {
+    return Array.from(new Set([...searchHistory, ...recentKeywords])).slice(0, 5);
+  }, [searchHistory, recentKeywords]);
+
+  const smartRecommendationsQuery = useSmartRecommendations(combinedHistory);
   const smartRecommendations = smartRecommendationsQuery.data || [];
 
-  const smartAlbumsQuery = useSmartAlbums(searchHistory);
+  const smartAlbumsQuery = useSmartAlbums(combinedHistory);
   const smartAlbums = smartAlbumsQuery.data || [];
 
   const personalizedArtist = useMemo(() => recentKeywords[0] || 'Arijit Singh', [recentKeywords]);
@@ -421,7 +425,16 @@ export default function HomeScreen() {
               {gridItems.map((gItem: any) => (
                 <TouchableOpacity
                   key={gItem.id}
-                  onPress={() => gItem.id === 'liked-songs' ? router.push('/liked-songs') : handleSongPress(gItem.id)}
+                  onPress={() => {
+                    if (gItem.id === 'liked-songs') {
+                        router.push('/liked-songs');
+                    } else if (gItem.type === 'category') {
+                        handleSearchPress(gItem.name);
+                    } else {
+                        // Play the song directly from history/grid
+                        playTrack(gItem, recentlyPlayedItems);
+                    }
+                  }}
                   className={`w-[48%] h-14 ${isDark ? 'bg-zinc-900/80' : 'bg-white'} rounded-md overflow-hidden m-1 flex-row items-center shadow-sm`}
                 >
                   {gItem.id === 'liked-songs' ? (
@@ -495,7 +508,7 @@ export default function HomeScreen() {
       <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'}`}>
         <FlatList
           data={data}
-          keyExtractor={(item, index) => item.id + index}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
           renderItem={({ item }) => (
             <SongListItem 
                item={item} 

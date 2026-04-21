@@ -216,7 +216,7 @@ export default function RootLayout() {
         }
       } catch (error: any) {
         // Only log connectivity-related errors if we are actually offline
-        const isConnected = await jioSaavnService.checkConnection();
+        const isConnected = await jioSaavnService.checkConnectivity();
         if (isConnected) {
           console.log(`Update check failed (Service Side): ${error.message}`);
         } else {

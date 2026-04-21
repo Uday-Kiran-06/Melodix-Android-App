@@ -44,10 +44,11 @@ interface PlayerState {
     isInQueue: (trackId: string) => boolean;
     setSleepTimer: (minutes: number | null) => void;
     initPlayer: () => Promise<void>;
-    loadRecommendations: (songId: string) => Promise<void>;
+    loadRecommendations: (songId: string, isManual?: boolean) => Promise<void>;
     isLoadingRecommendations: boolean;
     loadLyrics: (track: Track) => Promise<void>;
     clearRecommendationHistory: () => void;
+    refreshTrackUrl: (trackId: string) => Promise<Track | null>;
 }
 
 // Map quality selection to JioSaavn API download link keys
@@ -86,7 +87,7 @@ let timerInterval: NodeJS.Timeout | null = null;
 
 // Module-level re-entrancy lock — prevents PlaybackActiveTrackChanged and
 // PlaybackQueueEnded from triggering simultaneous recommendation loads.
-let isRecommendationInProgress = false;
+let currentRecommendationPromise: Promise<void> | null = null;
 let lastRecommendationTime = 0;
 const RECOMMENDATION_DEBOUNCE_MS = 3000;
 
@@ -117,7 +118,7 @@ export const usePlayerStore = create<PlayerState>()(
 
             clearRecommendationHistory: () => {
                 sessionRecommendedIds.clear();
-                isRecommendationInProgress = false;
+                currentRecommendationPromise = null;
                 lastRecommendationTime = 0;
             },
             setCurrentTrack: (track) => set({ currentTrack: track }),
@@ -146,7 +147,7 @@ export const usePlayerStore = create<PlayerState>()(
 
                 // Check for local version of the track
                 const downloadedTrack = downloadedSongs.find((s: any) => s.id === String(trackData.id));
-                const isOffline = !(await jioSaavnService.checkConnection());
+                const isOffline = !(await jioSaavnService.checkConnectivity());
 
                 let trackUrl = getTrackUrl(trackData, selectedQuality);
                 console.log(`[Player]: Loading track with quality: ${selectedQuality}`);
@@ -248,10 +249,10 @@ export const usePlayerStore = create<PlayerState>()(
                 // Vibe Match: Automatically seed initial recommendations
                 // Clear session dedup so a fresh play starts a new rec pool.
                 sessionRecommendedIds.clear();
-                isRecommendationInProgress = false;
+                currentRecommendationPromise = null;
 
                 try {
-                    const isConnected = await jioSaavnService.checkConnection();
+                    const isConnected = await jioSaavnService.checkConnectivity();
                     if (isConnected) {
                         const recommendations = await jioSaavnService.getRecommendations(trackData.id);
 
@@ -517,12 +518,14 @@ export const usePlayerStore = create<PlayerState>()(
             },
 
             loadRecommendations: async (songId: string, isManual: boolean = false) => {
+                // Return existing promise if already in progress to allow callers to await it
+                if (currentRecommendationPromise) {
+                    console.log('[Player]: loadRecommendations attached to existing promise');
+                    return currentRecommendationPromise;
+                }
+                
                 // Module-level re-entrancy guard + debounce
                 const now = Date.now();
-                if (isRecommendationInProgress) {
-                    console.log('[Player]: loadRecommendations skipped — already in progress');
-                    return;
-                }
                 
                 // Only debounce automated requests; allow manual clicks to bypass
                 if (!isManual && now - lastRecommendationTime < RECOMMENDATION_DEBOUNCE_MS) {
@@ -530,13 +533,13 @@ export const usePlayerStore = create<PlayerState>()(
                     return;
                 }
 
-                isRecommendationInProgress = true;
-                lastRecommendationTime = now;
-                set({ isLoadingRecommendations: true });
+                currentRecommendationPromise = (async () => {
+                    lastRecommendationTime = now;
+                    set({ isLoadingRecommendations: true });
 
-                try {
-                    const selectedQuality = useSettingsStore.getState().audioQuality;
-                    const { useHistoryStore } = require('./useHistoryStore');
+                    try {
+                        const selectedQuality = useSettingsStore.getState().audioQuality;
+                        const { useHistoryStore } = require('./useHistoryStore');
                     const recentItems: any[] = useHistoryStore.getState().recentlyPlayedItems || [];
                     const historySongs = recentItems.filter(i => (i.type === 'song' || !i.type) && i.id);
 
@@ -613,9 +616,68 @@ export const usePlayerStore = create<PlayerState>()(
                     console.error("Vibe Match failed:", e);
                 } finally {
                     set({ isLoadingRecommendations: false });
-                    isRecommendationInProgress = false;
+                    currentRecommendationPromise = null;
                 }
-            },
+            })() as Promise<void>;
+            
+            return currentRecommendationPromise;
+        },
+
+        refreshTrackUrl: async (trackId: string): Promise<Track | null> => {
+            console.log(`[Player]: Refreshing URL for track ${trackId}`);
+            try {
+                const songData = await jioSaavnService.getSongDetails(trackId);
+                if (!songData) return null;
+
+                const selectedQuality = useSettingsStore.getState().audioQuality;
+                const trackUrl = getTrackUrl(songData, selectedQuality);
+
+                const refreshedTrack: Track = {
+                    id: String(songData.id),
+                    url: trackUrl,
+                    title: cleanMetadata(songData.name, "Unknown Track"),
+                    artist: cleanMetadata(songData.artists?.primary?.[0]?.name, "Unknown Artist"),
+                    artwork: cleanMetadata(sanitizeImageUrl(songData.image), undefined),
+                    album: cleanMetadata(songData.album?.name, "Single"),
+                    description: cleanMetadata(songData.name, "Unknown Track"),
+                    genre: cleanMetadata(songData.language, "Music"),
+                    ...(Number(songData.duration) > 0 ? { duration: Number(songData.duration) } : {}),
+                    isLiveStream: false,
+                    // @ts-ignore
+                    originalDownloadUrl: songData.downloadUrl,
+                    // @ts-ignore
+                    originalUrl: songData.url
+                };
+
+                // Update in store queue
+                const { queue } = get();
+                const index = queue.findIndex(t => t.id === trackId);
+                if (index !== -1) {
+                    const newQueue = [...queue];
+                    newQueue[index] = refreshedTrack;
+                    set({ queue: newQueue });
+                }
+
+                // Update in originalQueue if present
+                const { originalQueue } = get();
+                const oIndex = originalQueue.findIndex(t => t.id === trackId);
+                if (oIndex !== -1) {
+                    const newOQueue = [...originalQueue];
+                    newOQueue[oIndex] = refreshedTrack;
+                    set({ originalQueue: newOQueue });
+                }
+
+                // If it's the current track, update it too
+                if (get().currentTrack?.id === trackId) {
+                    set({ currentTrack: refreshedTrack });
+                }
+
+                return refreshedTrack;
+            } catch (e) {
+                console.error(`[Player]: Failed to refresh URL for ${trackId}`, e);
+                return null;
+            }
+        },
 
             loadLyrics: async (track: Track) => {
                 if (!track || !track.id) return;

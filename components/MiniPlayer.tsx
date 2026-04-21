@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { useRouter, useSegments, usePathname } from 'expo-router';
-import { Pause, Play } from 'lucide-react-native';
+import { Clock, Pause, Play } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import React, { memo } from 'react';
 import { Dimensions, Text, TouchableOpacity, View } from 'react-native';
@@ -50,7 +50,7 @@ const getImageUrl = (track: any) => {
 };
 
 export default memo(function MiniPlayer() {
-    const { currentTrack, isPlaying, togglePlayback } = usePlayerStore();
+    const { currentTrack, isPlaying, togglePlayback, sleepTimer, remainingTime } = usePlayerStore();
     const { theme } = useSettingsStore();
     const { position, duration } = useProgress(1000);
     const router = useRouter();
@@ -103,10 +103,20 @@ export default memo(function MiniPlayer() {
                         className="w-11 h-11 rounded-md overflow-hidden bg-zinc-900"
                     />
                     <View className="flex-1 ml-4 justify-center">
-                        <MarqueeText
-                            text={currentTrack.title || ""}
-                            className={`${isDark ? 'text-white' : 'text-slate-900'} font-bold text-sm`}
-                        />
+                        <View className="flex-row items-center">
+                            <MarqueeText
+                                text={currentTrack.title || ""}
+                                className={`${isDark ? 'text-white' : 'text-slate-900'} font-bold text-sm`}
+                            />
+                            {sleepTimer && (
+                                <View className="ml-2 flex-row items-center bg-emerald-500/10 px-1 rounded">
+                                    <Clock size={8} color="#10b981" />
+                                    <Text className="text-emerald-500 text-[8px] font-bold ml-0.5">
+                                        {Math.ceil((remainingTime || 0) / 60)}m
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                         <Text className="text-zinc-500 text-xs" numberOfLines={1}>{currentTrack.artist || "Unknown Artist"}</Text>
                     </View>
                     <View className="flex-row items-center">

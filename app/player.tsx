@@ -279,13 +279,25 @@ export default function PlayerScreen() {
         setIsSkipping(true);
         try {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            
+            const currentIndex = await TrackPlayer.getActiveTrackIndex();
+            const playerQueue = await TrackPlayer.getQueue();
+            
+            // Rescue Mode: If skipping past the last track, try to load more first
+            if (currentIndex !== undefined && currentIndex === playerQueue.length - 1 && repeatMode === 'off') {
+                if (currentTrack?.id) {
+                    console.log("[Player]: End of queue reached during manual skip, loading rescue tracks...");
+                    await loadRecommendations(currentTrack.id, true);
+                }
+            }
+            
             await TrackPlayer.skipToNext();
         } catch (e) {
             console.error("Skip next failed:", e);
         } finally {
             setTimeout(() => setIsSkipping(false), 500);
         }
-    }, [isSkipping]);
+    }, [isSkipping, currentTrack, repeatMode, loadRecommendations]);
 
     const handleSkipPrev = useCallback(async () => {
         if (isSkipping) return;
