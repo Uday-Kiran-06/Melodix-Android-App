@@ -34,7 +34,7 @@ interface PlayerState {
     setCurrentTrack: (track: Track | null) => void;
     setIsPlaying: (playing: boolean) => void;
     setShuffle: (shuffle: boolean) => void;
-    setRepeatMode: (mode: 'off' | 'track' | 'queue') => void;
+    setRepeatMode: (mode: 'off' | 'track' | 'queue') => Promise<void>;
     playTrack: (trackData: any, queueData?: any[], quality?: keyof typeof qualityMap) => Promise<void>;
     togglePlayback: () => Promise<void>;
     toggleShuffle: () => void;

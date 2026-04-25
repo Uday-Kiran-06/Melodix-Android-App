@@ -282,18 +282,25 @@ export default function PlayerScreen() {
             
             const currentIndex = await TrackPlayer.getActiveTrackIndex();
             const playerQueue = await TrackPlayer.getQueue();
-            
-            // Rescue Mode: If skipping past the last track, try to load more first
-            if (currentIndex !== undefined && currentIndex === playerQueue.length - 1 && repeatMode === 'off') {
-                if (currentTrack?.id) {
-                    console.log("[Player]: End of queue reached during manual skip, loading rescue tracks...");
+            const isLastTrack = currentIndex !== undefined && currentIndex === playerQueue.length - 1;
+
+            if (isLastTrack && repeatMode === 'queue') {
+                // RNTP's skipToNext() throws when called manually on the last track, even with
+                // RepeatMode.Queue active — native auto-wrap only works at natural track end.
+                // We must wrap explicitly with skip(0).
+                console.log('[Player]: repeat:queue wrap — skipping to track 0');
+                await TrackPlayer.skip(0);
+                await TrackPlayer.play();
+            } else {
+                // Rescue Mode: If skipping past the last track with repeat off, load more tracks first
+                if (isLastTrack && repeatMode === 'off' && currentTrack?.id) {
+                    console.log('[Player]: End of queue reached during manual skip, loading rescue tracks...');
                     await loadRecommendations(currentTrack.id, true);
                 }
+                await TrackPlayer.skipToNext();
             }
-            
-            await TrackPlayer.skipToNext();
         } catch (e) {
-            console.error("Skip next failed:", e);
+            console.error('Skip next failed:', e);
         } finally {
             setTimeout(() => setIsSkipping(false), 500);
         }

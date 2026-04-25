@@ -120,7 +120,11 @@ export const useAudioEffects = () => {
                         const currentTrack = await TrackPlayer.getActiveTrack();
                         if (currentTrack?.id === lastSkipTrackId.current) {
                             if (index === queue.length - 1 && repeatMode === 'queue') {
+                                // Manually wrap to index 0 — RNTP's skipToNext() throws on the
+                                // last track even with RepeatMode.Queue set (auto-wrap is native-only).
+                                // Call play() after skip() since skip() does not auto-start playback.
                                 await TrackPlayer.skip(0);
+                                await TrackPlayer.play();
                             } else {
                                 await TrackPlayer.skipToNext();
                             }

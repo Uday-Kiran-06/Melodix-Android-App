@@ -132,9 +132,11 @@ export const PlaybackService = async function () {
                     store.loadRecommendations(event.track.id);
                 }
 
-                // PROACTIVE JIT REFRESH: If there is a next track, refresh it now to prevent future errors
+                // PROACTIVE JIT REFRESH: If there is a next track, refresh it now to prevent future errors.
+                // Skip this during repeat:track — the same track will loop natively and there is no
+                // meaningful "next" track to prefetch, which would waste a network call every loop.
                 const nextIndex = (index ?? 0) + 1;
-                if (nextIndex < queue.length) {
+                if (store.repeatMode !== 'track' && nextIndex < queue.length) {
                     const nextTrack = queue[nextIndex];
                     if (nextTrack?.id) {
                         console.log(`[PlayerService]: Proactively refreshing next track: ${nextTrack.title}`);
@@ -174,6 +176,14 @@ export const PlaybackService = async function () {
     TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async (event) => {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
+
+        // REHYDRATION GUARD: If the store hasn't rehydrated yet, repeatMode may still be the
+        // initial default ('off') even if the user had repeat enabled. Skip any side-effects
+        // until we have reliable persisted state.
+        if (!store.isRehydrated) {
+            console.log('[PlayerService]: Queue ended but store not yet rehydrated — ignoring.');
+            return;
+        }
 
         // REPEAT GUARD: If repeat is active, let native TrackPlayer looping handle it.
         if (store.repeatMode !== 'off') {
