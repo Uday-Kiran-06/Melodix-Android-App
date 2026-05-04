@@ -8,7 +8,7 @@ Melodix is a premium, high-performance **free music streaming** application buil
   <table>
     <tr>
       <td><img src="./assets/previews/home.jpg" width="200" alt="Home" /></td>
-      <td><img src="./assets/previews/player.png" width="200" alt="Player" /></td>
+      <td><img src="./assets/previews/player.jpg" width="200" alt="Player" /></td>
       <td><img src="./assets/previews/search.jpg" width="200" alt="Search" /></td>
     </tr>
     <tr>
@@ -27,7 +27,7 @@ Melodix is a premium, high-performance **free music streaming** application buil
       <td align="center"><b>Library</b></td>
     </tr>
     <tr>
-      <td><img src="./assets/previews/lyrics.png" width="200" alt="Lyrics" /></td>
+      <td><img src="./assets/previews/lyrics.jpg" width="200" alt="Lyrics" /></td>
       <td><img src="./assets/previews/app_icon.jpg" width="200" alt="App Icon" /></td>
       <td><img src="./assets/previews/login.jpg" width="200" alt="Login" /></td>
     </tr>
