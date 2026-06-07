@@ -335,13 +335,13 @@ export default function PlayerScreen() {
         return index === -1 ? [] : queue.slice(index + 1);
     }, [queue, currentTrack?.id]);
 
-    // Split upcoming songs into user-queued vs Vibe Match recommended
+    // Split upcoming songs into user-queued vs auto-recommended
     const userQueuedSongs = React.useMemo(() =>
         // @ts-ignore
         nextUpSongs.filter(t => !t.isRecommended),
         [nextUpSongs]
     );
-    const vibeMatchSongs = React.useMemo(() =>
+    const recommendedSongs = React.useMemo(() =>
         // @ts-ignore
         nextUpSongs.filter(t => t.isRecommended),
         [nextUpSongs]
@@ -399,16 +399,16 @@ export default function PlayerScreen() {
                     </TouchableOpacity>
                 ))}
 
-                {/* Vibe Match section header */}
-                {vibeMatchSongs.length > 0 && (
+                {/* Recommended section header */}
+                {recommendedSongs.length > 0 && (
                     <View className="flex-row items-center mb-4 mt-2">
                         <Zap size={16} color={DesignSystem.colors.primary} />
-                        <Text style={{ color: DesignSystem.colors.primary }} className="font-bold text-xl ml-1">Vibe Match</Text>
+                        <Text style={{ color: DesignSystem.colors.primary }} className="font-bold text-xl ml-1">Recommended</Text>
                     </View>
                 )}
             </>
         );
-    }, [currentTrack, userQueuedSongs, vibeMatchSongs, currentIndexInQueue]);
+    }, [currentTrack, userQueuedSongs, recommendedSongs, currentIndexInQueue]);
 
     if (!currentTrack) return null;
 
@@ -760,7 +760,7 @@ export default function PlayerScreen() {
                     </View>
 
                     <FlatList
-                        data={vibeMatchSongs}
+                        data={recommendedSongs}
                         keyExtractor={(track, index) => `rec-${track.id}-${index}`}
                         className="px-6"
                         showsVerticalScrollIndicator={false}
@@ -802,7 +802,7 @@ export default function PlayerScreen() {
                                 {nextUpSongs.length === 0 && (
                                     <View className="py-10 items-center">
                                         <Zap size={32} color={DesignSystem.colors.primary} style={{ opacity: 0.4 }} />
-                                        <Text className="text-zinc-500 text-center italic mt-2">Queue empty. Tap Load More for Vibe Match.</Text>
+                                        <Text className="text-zinc-500 text-center italic mt-2">Queue empty. Tap Load More for recommendations.</Text>
                                     </View>
                                 )}
 
@@ -819,7 +819,7 @@ export default function PlayerScreen() {
                                         {isLoadingRecommendations ? (
                                             <>
                                                 <ActivityIndicator size="small" color={DesignSystem.colors.primary} />
-                                                <Text style={{ color: DesignSystem.colors.primary }} className="ml-2 font-semibold">Loading Vibe Match...</Text>
+                                                <Text style={{ color: DesignSystem.colors.primary }} className="ml-2 font-semibold">Loading recommendations...</Text>
                                             </>
                                         ) : (
                                             <>

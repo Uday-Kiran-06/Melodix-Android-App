@@ -246,58 +246,25 @@ export const usePlayerStore = create<PlayerState>()(
                 await TrackPlayer.play();
                 set({ currentTrack: trackToPlay, isPlaying: true });
 
-                // Vibe Match: Automatically seed initial recommendations
+                // Auto-seed recommendations when playing a standalone track (no playlist)
                 // Clear session dedup so a fresh play starts a new rec pool.
                 sessionRecommendedIds.clear();
                 currentRecommendationPromise = null;
 
-                try {
-                    const isConnected = await jioSaavnService.checkConnectivity();
-                    if (isConnected) {
-                        const recommendations = await jioSaavnService.getRecommendations(trackData.id);
-
-                        if (recommendations && recommendations.length > 0) {
-                            const existingIds = new Set(queueToPlay.map(t => t.id));
-                            const recommendedTracks: Track[] = recommendations
-                                .filter((item: any) => {
-                                    const id = String(item.id);
-                                    return !existingIds.has(id) && !sessionRecommendedIds.has(id);
-                                })
-                                .slice(0, 10) // Cap at 10 for the initial seed
-                                .map((item: any) => ({
-                                    id: String(item.id),
-                                    url: getTrackUrl(item, selectedQuality),
-                                    title: cleanMetadata(item.name || item.title, "Unknown Track"),
-                                    artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
-                                    artwork: cleanMetadata(
-                                        sanitizeImageUrl(item.image || item.artwork),
-                                        undefined
-                                    ),
-                                    album: cleanMetadata(item.album?.name || item.album, "Single"),
-                                    description: cleanMetadata(item.name || item.title, "Unknown Track"),
-                                    genre: cleanMetadata(item.language, "Music"),
-                                    ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
-                                    isLiveStream: false,
-                                    // @ts-ignore
-                                    isRecommended: true,
-                                    // @ts-ignore
-                                    originalDownloadUrl: item.downloadUrl,
-                                    // @ts-ignore
-                                    originalUrl: item.url
-                                }));
-
-                            if (recommendedTracks.length > 0) {
-                                recommendedTracks.forEach(t => sessionRecommendedIds.add(t.id));
-                                await TrackPlayer.add(recommendedTracks);
-                                set((state) => ({
-                                    queue: [...state.queue, ...recommendedTracks],
-                                    originalQueue: [...state.originalQueue, ...recommendedTracks]
-                                }));
-                            }
+                // Only auto-seed if the song was played standalone (no playlist queue)
+                if (queueToPlay.length <= 1) {
+                    try {
+                        const isConnected = await jioSaavnService.checkConnectivity();
+                        if (isConnected) {
+                            console.log('[Player]: Standalone play detected, seeding recommendations...');
+                            // Small delay to let the track start playing first
+                            setTimeout(() => {
+                                get().loadRecommendations(String(trackData.id));
+                            }, 500);
                         }
+                    } catch (e) {
+                        console.error("[Player]: Auto-seed recommendations failed:", e);
                     }
-                } catch (e) {
-                    console.error("Vibe Match failed:", e);
                 }
 
                 // Track history for smart recommendations
@@ -539,89 +506,78 @@ export const usePlayerStore = create<PlayerState>()(
 
                     try {
                         const selectedQuality = useSettingsStore.getState().audioQuality;
-                        const { useHistoryStore } = require('./useHistoryStore');
-                    const recentItems: any[] = useHistoryStore.getState().recentlyPlayedItems || [];
-                    const historySongs = recentItems.filter(i => (i.type === 'song' || !i.type) && i.id);
-
-                    const runVibeMatch = async (seeds: string[], strictDedup: boolean) => {
-                        console.log(`[Player]: Vibe Match with ${seeds.length} seeds (strict: ${strictDedup}):`, seeds);
-                        const recommendations = await jioSaavnService.getMultiSeedRecommendations(seeds);
-                        if (!recommendations || recommendations.length === 0) return [];
-
                         const existingIds = new Set(get().queue.map(t => t.id));
-                        return recommendations
-                            .filter((item: any) => {
-                                const id = String(item.id);
-                                // ALWAYS strict dedup against the actual queue (no duplicates allowed)
-                                if (existingIds.has(id)) return false;
-                                // Session-level dedup: skip songs seen in this session UNLESS we're in manual rescue mode
-                                if (strictDedup && sessionRecommendedIds.has(id)) return false;
-                                return true;
-                            })
-                            .map((item: any) => ({
-                                id: String(item.id),
-                                url: getTrackUrl(item, selectedQuality),
-                                title: cleanMetadata(item.name || item.title, "Unknown Track"),
-                                artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
-                                artwork: cleanMetadata(sanitizeImageUrl(item.image || item.artwork), undefined),
-                                album: cleanMetadata(item.album?.name || item.album, "Single"),
-                                description: cleanMetadata(item.name || item.title, "Unknown Track"),
-                                genre: cleanMetadata(item.language, "Music"),
-                                ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
-                                isLiveStream: false,
-                                // @ts-ignore
-                                isRecommended: true,
-                                // @ts-ignore
-                                originalDownloadUrl: item.downloadUrl,
-                                // @ts-ignore
-                                originalUrl: item.url
+
+                        const filterAndMap = (songs: any[], relaxDedup: boolean = false): Track[] => {
+                            return songs
+                                .filter((item: any) => {
+                                    const id = String(item.id);
+                                    if (existingIds.has(id)) return false;
+                                    if (!relaxDedup && sessionRecommendedIds.has(id)) return false;
+                                    return true;
+                                })
+                                .map((item: any) => ({
+                                    id: String(item.id),
+                                    url: getTrackUrl(item, selectedQuality),
+                                    title: cleanMetadata(item.name || item.title, "Unknown Track"),
+                                    artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
+                                    artwork: cleanMetadata(sanitizeImageUrl(item.image || item.artwork), undefined),
+                                    album: cleanMetadata(item.album?.name || item.album, "Single"),
+                                    description: cleanMetadata(item.name || item.title, "Unknown Track"),
+                                    genre: cleanMetadata(item.language, "Music"),
+                                    ...(Number(item.duration) > 0 ? { duration: Number(item.duration) } : {}),
+                                    isLiveStream: false,
+                                    // @ts-ignore
+                                    isRecommended: true,
+                                    // @ts-ignore
+                                    originalDownloadUrl: item.downloadUrl,
+                                    // @ts-ignore
+                                    originalUrl: item.url
+                                }));
+                        };
+
+                        // PASS 1: Direct song suggestions (best quality — same song context)
+                        console.log(`[Player]: Loading recommendations for song: ${songId}`);
+                        const recommendations = await jioSaavnService.getRecommendations(songId);
+                        let recommendedTracks = filterAndMap(recommendations || []);
+
+                        // PASS 2 (manual only): If low results, try the current track's artist
+                        if (isManual && recommendedTracks.length < 5) {
+                            console.log('[Player]: Low results, trying artist-based fallback...');
+                            const currentTrack = get().currentTrack;
+                            const artistName = currentTrack?.artist;
+                            if (artistName && artistName !== 'Unknown Artist') {
+                                const artistSongs = await jioSaavnService.searchSongs(`${artistName} top songs`);
+                                const artistTracks = filterAndMap(artistSongs || [], true);
+                                // Merge without duplicates
+                                const existingRecIds = new Set(recommendedTracks.map(t => t.id));
+                                const newArtistTracks = artistTracks.filter(t => !existingRecIds.has(t.id));
+                                recommendedTracks = [...recommendedTracks, ...newArtistTracks];
+                            }
+                        }
+
+                        if (recommendedTracks.length > 0) {
+                            const tracksToAdd = recommendedTracks.slice(0, 15);
+                            tracksToAdd.forEach(t => sessionRecommendedIds.add(t.id));
+                            await TrackPlayer.add(tracksToAdd);
+                            set((state) => ({
+                                queue: [...state.queue, ...tracksToAdd],
+                                originalQueue: [...state.originalQueue, ...tracksToAdd]
                             }));
-                    };
-
-                    // PASS 1: High Accuracy (Current Track + Recent History)
-                    const seeds1 = [songId, ...historySongs.slice(0, 2).map(t => String(t.id))].filter(Boolean);
-                    let recommendedTracks = await runVibeMatch(seeds1, true);
-
-                    // PASS 2: Seed Rotation (Manual Rescue Mode)
-                    // If manual and no new tracks found, rotate seeds deeper into history and relax session dedup
-                    if (isManual && recommendedTracks.length < 5 && historySongs.length > 2) {
-                        console.log('[Player]: Low results, starting Seed Rotation (Pass 2)...');
-                        const seeds2 = [songId, ...historySongs.slice(2, 5).map(t => String(t.id))].filter(Boolean);
-                        const extraTracks = await runVibeMatch(seeds2, true);
-                        recommendedTracks = [...new Map([...recommendedTracks, ...extraTracks].map(t => [t.id, t])).values()];
+                            console.log(`[Player]: Successfully added ${tracksToAdd.length} recommended tracks`);
+                        } else if (isManual) {
+                            console.log('[Player]: Recommendations exhausted — no new tracks found');
+                        }
+                    } catch (e) {
+                        console.error("[Player]: Recommendations failed:", e);
+                    } finally {
+                        set({ isLoadingRecommendations: false });
+                        currentRecommendationPromise = null;
                     }
-
-                    // PASS 3: Session Dedup Relaxation (Manual Rescue Mode)
-                    // If still low, allow songs seen previously in this session (but NOT in queue)
-                    if (isManual && recommendedTracks.length < 3) {
-                        console.log('[Player]: Still low, relaxing session dedup (Pass 3)...');
-                        const seeds3 = [songId, ...historySongs.slice(0, 3).map(t => String(t.id))].filter(Boolean);
-                        const desperateTracks = await runVibeMatch(seeds3, false);
-                        recommendedTracks = [...new Map([...recommendedTracks, ...desperateTracks].map(t => [t.id, t])).values()];
-                    }
-
-                    if (recommendedTracks.length > 0) {
-                        const tracksToAdd = recommendedTracks.slice(0, 12);
-                        tracksToAdd.forEach(t => sessionRecommendedIds.add(t.id));
-                        await TrackPlayer.add(tracksToAdd);
-                        set((state) => ({
-                            queue: [...state.queue, ...tracksToAdd],
-                            originalQueue: [...state.originalQueue, ...tracksToAdd]
-                        }));
-                        console.log(`[Player]: Successfully added ${tracksToAdd.length} Vibe Match tracks`);
-                    } else if (isManual) {
-                        console.log('[Player]: Vibe Match exhausted — no new tracks found even after rotation');
-                    }
-                } catch (e) {
-                    console.error("Vibe Match failed:", e);
-                } finally {
-                    set({ isLoadingRecommendations: false });
-                    currentRecommendationPromise = null;
-                }
-            })() as Promise<void>;
+                })() as Promise<void>;
             
-            return currentRecommendationPromise;
-        },
+                return currentRecommendationPromise;
+            },
 
         refreshTrackUrl: async (trackId: string): Promise<Track | null> => {
             console.log(`[Player]: Refreshing URL for track ${trackId}`);

@@ -563,7 +563,7 @@ export const jioSaavnService = {
                 } catch (e) { }
             }
 
-            // Fallback: If both fail, create a "Vibe" manually using Album, Artist, or Name
+            // Fallback: If both fail, build recommendations from Album, Artist, or Name
             try {
                 const details = await jioSaavnService.getSongDetails(songId);
                 if (!details) return [];
@@ -610,7 +610,7 @@ export const jioSaavnService = {
                 return [];
             }
         } catch (error) {
-            console.error("Vibe matching failed:", error);
+            console.error("Recommendations failed:", error);
             return [];
         }
     },
