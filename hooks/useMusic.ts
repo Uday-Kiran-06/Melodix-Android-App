@@ -179,3 +179,90 @@ export const useLikedRecommendations = (songId: string | null) => {
         staleTime: 1000 * 60 * 15,
     });
 };
+
+// ─── Personalized Hooks (preference-driven) ─────────────────────────────────
+
+/**
+ * Top hits for a specific artist, optionally scoped to a language.
+ */
+export const usePersonalizedArtistHits = (artistName: string, language?: string) => {
+    const langSuffix = language ? ` ${language}` : '';
+    const query = `${artistName} top hits${langSuffix}`;
+    return useQuery({
+        queryKey: ['personalized-artist', artistName, language],
+        queryFn: () => jioSaavnService.searchSongs(query, language || 'telugu,hindi,english'),
+        enabled: !!artistName,
+        staleTime: 1000 * 60 * 60,
+        gcTime: 1000 * 60 * 60 * 24,
+    });
+};
+
+/**
+ * Top hits for a specific language (e.g. Telugu Hits, Hindi Hits).
+ */
+export const usePersonalizedLanguageHits = (language: string) => {
+    const query = `top ${language} hits songs`;
+    return useQuery({
+        queryKey: ['personalized-lang-hits', language],
+        queryFn: () => jioSaavnService.searchSongs(query, language),
+        enabled: !!language,
+        staleTime: 1000 * 60 * 60 * 3,
+        gcTime: 1000 * 60 * 60 * 24,
+    });
+};
+
+/**
+ * Mood-based music biased toward the user's top language.
+ */
+export const usePersonalizedMoodHits = (mood: string, language: string) => {
+    const query = `${mood} ${language} hits`;
+    return useQuery({
+        queryKey: ['personalized-mood', mood, language],
+        queryFn: () => jioSaavnService.searchSongs(query, language),
+        enabled: !!mood && !!language,
+        staleTime: 1000 * 60 * 60,
+        gcTime: 1000 * 60 * 60 * 24,
+    });
+};
+
+/**
+ * New releases biased toward the user's top language.
+ */
+export const usePersonalizedNewReleases = (language: string) => {
+    const query = `latest new ${language} releases 2024 2025`;
+    return useQuery({
+        queryKey: ['personalized-new-releases', language],
+        queryFn: () => jioSaavnService.searchSongs(query, language),
+        enabled: !!language,
+        staleTime: 1000 * 60 * 30,
+        gcTime: 1000 * 60 * 60 * 24,
+    });
+};
+
+/**
+ * Movie albums biased toward the user's top language.
+ */
+export const usePersonalizedMovieAlbums = (language: string) => {
+    const query = `latest ${language} movie albums`;
+    return useQuery({
+        queryKey: ['personalized-movie-albums', language],
+        queryFn: () => jioSaavnService.searchAlbums(query, language),
+        enabled: !!language,
+        staleTime: 1000 * 60 * 60 * 3,
+        gcTime: 1000 * 60 * 60 * 24,
+    });
+};
+
+/**
+ * Retro classics for the user's top language (only shown if they've listened to it).
+ */
+export const usePersonalizedRetro = (language: string) => {
+    const query = `90s old classic ${language} hits`;
+    return useQuery({
+        queryKey: ['personalized-retro', language],
+        queryFn: () => jioSaavnService.searchSongs(query, language),
+        enabled: !!language,
+        staleTime: 1000 * 60 * 60 * 24,
+        gcTime: 1000 * 60 * 60 * 72,
+    });
+};

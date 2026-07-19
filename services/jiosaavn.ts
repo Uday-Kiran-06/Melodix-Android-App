@@ -16,33 +16,69 @@ const DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
 };
 
+// Concurrency queue
+let activeRequests = 0;
+const MAX_CONCURRENT_REQUESTS = 6;
+const requestQueue: (() => void)[] = [];
+
+const processQueue = () => {
+    if (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT_REQUESTS) {
+        const next = requestQueue.shift();
+        if (next) next();
+    }
+};
+
+const acquireToken = (): Promise<void> => {
+    return new Promise((resolve) => {
+        const tryAcquire = () => {
+            if (activeRequests < MAX_CONCURRENT_REQUESTS) {
+                activeRequests++;
+                resolve();
+            } else {
+                requestQueue.push(tryAcquire);
+            }
+        };
+        tryAcquire();
+    });
+};
+
+const releaseToken = () => {
+    activeRequests--;
+    processQueue();
+};
+
 const fetchWithTimeout = async (url: string, options: any = {}, timeout: number = 10000) => {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    
+    await acquireToken();
     try {
-        const response = await fetch(url, {
-            ...options,
-            headers: {
-                ...DEFAULT_HEADERS,
-                ...options.headers,
-            },
-            signal: controller.signal,
-        });
-        clearTimeout(id);
-        return response;
-    } catch (error: any) {
-        clearTimeout(id);
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
         
-        // Handle RangeError: status 0 by wrapping it in a standard Error
-        if (error.message?.includes('status (0)') || error.name === 'RangeError') {
-            throw new Error(`Network failure (Status 0): ${url}`);
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    ...DEFAULT_HEADERS,
+                    ...options.headers,
+                },
+                signal: controller.signal,
+            });
+            clearTimeout(id);
+            return response;
+        } catch (error: any) {
+            clearTimeout(id);
+            
+            // Handle RangeError: status 0 by wrapping it in a standard Error
+            if (error.message?.includes('status (0)') || error.name === 'RangeError') {
+                throw new Error(`Network failure (Status 0): ${url}`);
+            }
+            
+            if (error.name === 'AbortError') {
+                throw new Error(`Request timed out for ${url}`);
+            }
+            throw error;
         }
-        
-        if (error.name === 'AbortError') {
-            throw new Error(`Request timed out for ${url}`);
-        }
-        throw error;
+    } finally {
+        releaseToken();
     }
 };
 
