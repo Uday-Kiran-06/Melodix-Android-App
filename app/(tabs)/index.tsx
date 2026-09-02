@@ -25,7 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { MoreVertical } from 'lucide-react-native';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -130,6 +130,8 @@ const SongListItem = memo(({ item, onPress, onMore, isDark }: {
   );
 });
 
+import { personalizeTrendingPool } from '@/services/LanguageEngine';
+
 // ─── Home Screen ──────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -143,6 +145,7 @@ export default function HomeScreen() {
     recentKeywords = [],
     searchHistory = [],
     getTopLanguages,
+    getLanguageWeights,
     getTopArtists,
   } = useHistoryStore();
 
@@ -154,6 +157,7 @@ export default function HomeScreen() {
 
   // ── Preference derivation ─────────────────────────────────────────────────
   const topLanguages = useMemo(() => getTopLanguages(3), [getTopLanguages, recentlyPlayedItems]);
+  const languageWeights = useMemo(() => getLanguageWeights(), [getLanguageWeights, recentlyPlayedItems]);
   const topArtists   = useMemo(() => getTopArtists(3),   [getTopArtists,   recentlyPlayedItems]);
 
   const primaryLang   = topLanguages[0] ?? 'telugu';
@@ -189,17 +193,20 @@ export default function HomeScreen() {
   // ── ALL Data Queries (all at component level — fire immediately on mount) ──
 
   const trendingQuery   = useTrending();
-  const trending        = useMemo(() => shuffle(trendingQuery.data || []).slice(0, 20), [trendingQuery.data]);
+  const trending        = useMemo(
+    () => personalizeTrendingPool(trendingQuery.data || [], languageWeights, 20),
+    [trendingQuery.data, languageWeights]
+  );
 
   const combinedHistory = useMemo(
     () => Array.from(new Set([...searchHistory, ...recentKeywords])).slice(0, 5),
     [searchHistory, recentKeywords]
   );
 
-  const smartRecsQuery  = useSmartRecommendations(combinedHistory);
+  const smartRecsQuery  = useSmartRecommendations(combinedHistory, primaryLang);
   const smartRecs       = smartRecsQuery.data || [];
 
-  const playlistsQuery  = useFeaturedPlaylists();
+  const playlistsQuery  = useFeaturedPlaylists(primaryLang);
   const playlists       = playlistsQuery.data || [];
 
   const likedRecsQuery  = useLikedRecommendations(likedSongs[0]?.id || null);
@@ -207,7 +214,7 @@ export default function HomeScreen() {
 
   // Primary language sections
   const newRelQuery  = usePersonalizedNewReleases(primaryLang);
-  const newRel       = useMemo(() => shuffle(newRelQuery.data || []).slice(0, 20), [newRelQuery.data]);
+  const newRel       = useMemo(() => (newRelQuery.data || []).slice(0, 20), [newRelQuery.data]);
 
   const albumsQuery  = usePersonalizedMovieAlbums(primaryLang);
   const albums       = albumsQuery.data || [];
@@ -238,14 +245,23 @@ export default function HomeScreen() {
   const artist2Query = usePersonalizedArtistHits(artist2, primaryLang);
   const artist2Data  = artist2Query.data || [];
 
-  // English — always fetched, conditionally shown
+  // English — always fetched, conditionally shown when not already covered in primary/secondary
   const englishQuery = useEnglishHits();
   const english      = englishQuery.data || [];
-  const showEnglish  = topLanguages.includes('english');
+  const showEnglishExtra = primaryLang !== 'english' && secondaryLang !== 'english' && topLanguages.includes('english');
 
   const infiniteSongs = useInfiniteSongs(`trending ${primaryLang} songs`);
 
   useEffect(() => { if (user) fetchLibrary(user.id); }, [user]);
+
+  // When Home comes into focus, revalidate trending data if staleTime has elapsed
+  useFocusEffect(
+    useCallback(() => {
+      if (trendingQuery.isStale) {
+        trendingQuery.refetch();
+      }
+    }, [trendingQuery.isStale, trendingQuery.refetch])
+  );
 
   useEffect(() => {
     trending.slice(0, 10).forEach(item => {
@@ -277,7 +293,7 @@ export default function HomeScreen() {
       { type: 'quick_access', id: 'qa' },
 
       // Trending
-      { type: 'section', id: 'trending',   title: `Trending ${cap(primaryLang)}`, data: trending,   loading: trendingQuery.isLoading },
+      { type: 'section', id: 'trending',   title: 'Trending Now',                  data: trending,   loading: trendingQuery.isLoading },
 
       // Liked-song recommendations (conditional)
       { type: 'section', id: 'liked_recs', title: 'Recommended for You',          data: likedRecs,  loading: likedRecsQuery.isLoading,  enabled: L(likedRecsQuery.isLoading, likedRecs) },
@@ -315,8 +331,8 @@ export default function HomeScreen() {
       // Retro
       { type: 'section', id: 'retro',      title: `Retro ${cap(primaryLang)} Classics`, data: retro, loading: retroQuery.isLoading },
 
-      // English (only if user listens to English)
-      ...(showEnglish ? [{ type: 'section', id: 'english', title: 'English Pop Hits', data: english, loading: englishQuery.isLoading }] : []),
+      // English (only if user listens to English and not already shown as primary/secondary)
+      ...(showEnglishExtra ? [{ type: 'section', id: 'english', title: 'English Pop Hits', data: english, loading: englishQuery.isLoading }] : []),
 
       // More hits (bottom)
       { type: 'section', id: 'more',       title: `More ${cap(primaryLang)} Hits`, data: infiniteSongs.data?.pages[0]?.slice(0, 15) || [], loading: infiniteSongs.isLoading },
@@ -338,7 +354,7 @@ export default function HomeScreen() {
     romantic, romanticQuery.isLoading,
     happy, happyQuery.isLoading,
     retro, retroQuery.isLoading,
-    english, englishQuery.isLoading, showEnglish,
+    english, englishQuery.isLoading, showEnglishExtra,
     infiniteSongs.data, infiniteSongs.isLoading,
     primaryLang, secondaryLang,
   ]);
@@ -355,15 +371,19 @@ export default function HomeScreen() {
         <FlatList
           horizontal showsHorizontalScrollIndicator={false}
           data={data}
-          keyExtractor={(item, i) => `${item.id || i}`}
+          keyExtractor={(item, i) => item?.id ? `${item.id}-${i}` : `sec-item-${i}`}
           renderItem={({ item }) => (
             <SongCard
               item={item}
-              onPress={() =>
-                item.type === 'album' ? router.push(`/album/${item.id}` as any)
-                  : item.type === 'playlist' ? router.push(`/saavn-playlist/${item.id}` as any)
-                  : goSong(item.id)
-              }
+              onPress={() => {
+                if (item.type === 'album') {
+                  router.push(`/album/${item.id}` as any);
+                } else if (item.type === 'playlist') {
+                  router.push(`/saavn-playlist/${item.id}` as any);
+                } else {
+                  goSong(item.id);
+                }
+              }}
               isDark={isDark}
               type={type}
             />

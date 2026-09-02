@@ -1,4 +1,5 @@
 import TrackPlayer, { Event, State } from 'react-native-track-player';
+import { queueController } from './QueueController';
 
 // Track IDs and their current retry count (reset when a track starts successfully)
 const recoveryRetries = new Map<string, number>();
@@ -7,22 +8,21 @@ const MAX_RETRY_ATTEMPTS = 3;
 // Track IDs that have already been retried once in the current session
 const retriedTrackIds = new Set<string>();
 
+// Singleton listener guard: prevents duplicate event subscription on reload
+let isPlaybackServiceRegistered = false;
+let lastRemoteNextTime = 0;
+let lastRemotePrevTime = 0;
+const REMOTE_DEBOUNCE_MS = 350;
+
 export const PlaybackService = async function () {
+    if (isPlaybackServiceRegistered) {
+        console.log('[PlayerService]: PlaybackService already initialized, skipping duplicate registration');
+        return;
+    }
+    isPlaybackServiceRegistered = true;
+
     const safeSkipForward = async () => {
-        const { usePlayerStore } = require('../hooks/usePlayerStore');
-        const store = usePlayerStore.getState();
-        
         try {
-            const queue = await TrackPlayer.getQueue();
-            const index = await TrackPlayer.getActiveTrackIndex();
-            
-            if (index !== undefined && index === queue.length - 1 && store.repeatMode === 'off') {
-                const currentTrack = await TrackPlayer.getActiveTrack();
-                if (currentTrack?.id) {
-                    console.log('[PlayerService]: RemoteNext at end of queue, loading rescue seeds...');
-                    await store.loadRecommendations(currentTrack.id, true);
-                }
-            }
             await TrackPlayer.skipToNext();
             await TrackPlayer.play();
         } catch (e) {
@@ -32,11 +32,40 @@ export const PlaybackService = async function () {
 
     TrackPlayer.addEventListener(Event.RemotePlay, () => { console.log('RemotePlay'); TrackPlayer.play(); });
     TrackPlayer.addEventListener(Event.RemotePause, () => { console.log('RemotePause'); TrackPlayer.pause(); });
-    TrackPlayer.addEventListener(Event.RemoteNext, () => { console.log('RemoteNext'); safeSkipForward(); });
-    TrackPlayer.addEventListener(Event.RemotePrevious, () => { console.log('RemotePrevious'); TrackPlayer.skipToPrevious(); });
+    TrackPlayer.addEventListener(Event.RemoteNext, () => {
+        const now = Date.now();
+        if (now - lastRemoteNextTime < REMOTE_DEBOUNCE_MS) {
+            console.log('[PlayerService]: Debounced rapid RemoteNext');
+            return;
+        }
+        lastRemoteNextTime = now;
+        const { setPlaybackTransitionReason } = require('../hooks/usePlayerStore');
+        if (typeof setPlaybackTransitionReason === 'function') {
+            setPlaybackTransitionReason('REMOTE_NEXT');
+        }
+        console.log('RemoteNext');
+        safeSkipForward();
+    });
+    TrackPlayer.addEventListener(Event.RemotePrevious, () => {
+        const now = Date.now();
+        if (now - lastRemotePrevTime < REMOTE_DEBOUNCE_MS) {
+            console.log('[PlayerService]: Debounced rapid RemotePrevious');
+            return;
+        }
+        lastRemotePrevTime = now;
+        const { setPlaybackTransitionReason } = require('../hooks/usePlayerStore');
+        if (typeof setPlaybackTransitionReason === 'function') {
+            setPlaybackTransitionReason('REMOTE_PREVIOUS');
+        }
+        console.log('RemotePrevious');
+        TrackPlayer.skipToPrevious();
+    });
     TrackPlayer.addEventListener(Event.RemoteStop, async () => { 
         console.log('RemoteStop'); 
-        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const { usePlayerStore, getNextPlaybackGeneration } = require('../hooks/usePlayerStore');
+        if (typeof getNextPlaybackGeneration === 'function') {
+            getNextPlaybackGeneration();
+        }
         const store = usePlayerStore.getState();
         
         // Capture final position before reset
@@ -45,12 +74,16 @@ export const PlaybackService = async function () {
             if (pos > 0) store.setLastPosition(pos);
         } catch (e) {}
 
-        await TrackPlayer.stop();
-        await TrackPlayer.reset(); 
+        await queueController.run(async () => {
+            await TrackPlayer.stop();
+            await TrackPlayer.reset(); 
+        });
     });
     TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
         console.log('RemoteSeek to:', event.position);
         await TrackPlayer.seekTo(event.position);
+        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        usePlayerStore.getState().setLastPosition(event.position);
     });
     TrackPlayer.addEventListener(Event.RemoteJumpForward, async (event) => {
         const current = await TrackPlayer.getPosition();
@@ -61,6 +94,10 @@ export const PlaybackService = async function () {
         await TrackPlayer.seekTo(current - (event.interval || 10));
     });
     TrackPlayer.addEventListener(Event.RemotePlayId, async (event) => {
+        const { setPlaybackTransitionReason } = require('../hooks/usePlayerStore');
+        if (typeof setPlaybackTransitionReason === 'function') {
+            setPlaybackTransitionReason('REMOTE_SELECTED_TRACK');
+        }
         const queue = await TrackPlayer.getQueue();
         const index = queue.findIndex(t => t.id === event.id);
         if (index !== -1) {
@@ -94,16 +131,22 @@ export const PlaybackService = async function () {
     });
 
     let lastTrackId: string | undefined = undefined;
+    let lastProcessedGeneration: number = -1;
     TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
-        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const { usePlayerStore, getPlaybackGeneration, getAndResetPlaybackTransitionReason } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
+        const currentGen = typeof getPlaybackGeneration === 'function' ? getPlaybackGeneration() : 0;
+        const transitionReason = typeof getAndResetPlaybackTransitionReason === 'function'
+            ? getAndResetPlaybackTransitionReason()
+            : 'NATURAL_ADVANCEMENT';
         
         if (event.track !== undefined && event.track !== null) {
-            console.log(`[PlayerService]: Active track changed to: ${event.track.title} (${event.track.id})`);
+            console.log(`[PlaybackTransition] from=${lastTrackId ?? 'none'} to=${event.track.id} reason=${transitionReason} generation=${currentGen}`);
             
-            // Prevent duplicate triggers for the same track ID
-            const isNewTrack = lastTrackId !== event.track.id;
+            // Track is considered a new playback instance if the track ID changed OR the playback generation changed
+            const isNewTrack = lastTrackId !== event.track.id || lastProcessedGeneration !== currentGen;
             lastTrackId = event.track.id;
+            lastProcessedGeneration = currentGen;
 
             // Sync the store with the track provided by TrackPlayer
             store.setCurrentTrack(event.track);
@@ -118,44 +161,54 @@ export const PlaybackService = async function () {
                 store.loadLyrics(event.track);
             }
 
-            // Proactively top up queue when 5 tracks or fewer remain
-            // (raised from 3 to give more time for multi-seed network calls)
             if (isNewTrack) {
                 // Reset retry count for this track since it successfully started
                 recoveryRetries.delete(event.track.id);
 
-                const index = event.index;
-                const queue = await TrackPlayer.getQueue();
-                const remaining = queue.length - ((index ?? 0) + 1);
-                if (remaining <= 5 && event.track.id && store.repeatMode === 'off') {
-                    console.log(`[PlayerService]: Only ${remaining} tracks left, topping up queue...`);
-                    store.loadRecommendations(event.track.id);
+                // Proactively refresh UI recommendations for the new active track (Up Next discovery)
+                if (event.track.id) {
+                    store.loadRecommendations(event.track.id, false, currentGen);
                 }
 
                 // PROACTIVE JIT REFRESH: If there is a next track, refresh it now to prevent future errors.
                 // Skip this during repeat:track — the same track will loop natively and there is no
                 // meaningful "next" track to prefetch, which would waste a network call every loop.
+                const index = event.index;
+                const queue = await TrackPlayer.getQueue();
                 const nextIndex = (index ?? 0) + 1;
                 if (store.repeatMode !== 'track' && nextIndex < queue.length) {
                     const nextTrack = queue[nextIndex];
                     if (nextTrack?.id) {
+                        const targetNextId = nextTrack.id;
+                        const jitGen = typeof getPlaybackGeneration === 'function' ? getPlaybackGeneration() : 0;
                         console.log(`[PlayerService]: Proactively refreshing next track: ${nextTrack.title}`);
-                        store.refreshTrackUrl(nextTrack.id).then(async (refreshed: any) => {
-                            if (refreshed) {
+                        store.refreshTrackUrl(targetNextId).then(async (refreshed: any) => {
+                            if (refreshed && refreshed.id === targetNextId) {
                                 try {
-                                    // Native Gapless Swap: silently update the native queue item holding the URL
-                                    // This fetches the URL ahead of time without interrupting the currently playing track!
-                                    const latestQueue = await TrackPlayer.getQueue();
-                                    const latestIndex = await TrackPlayer.getActiveTrackIndex();
-                                    
-                                    // Ensure playback hasn't already reached or passed our target track index
-                                    if (latestIndex !== undefined && latestIndex < nextIndex && latestQueue.length > nextIndex) {
-                                        if (latestQueue[nextIndex].id === refreshed.id) {
-                                            console.log(`[PlayerService]: Natively swapping refreshed URL ahead of time for: ${refreshed.title}`);
-                                            await TrackPlayer.remove(nextIndex);
-                                            await TrackPlayer.add(refreshed, nextIndex);
+                                    await queueController.run(async () => {
+                                        if (typeof getPlaybackGeneration === 'function' && getPlaybackGeneration() !== jitGen) {
+                                            console.log('[PlayerService]: JIT refresh aborted: playback generation changed');
+                                            return;
                                         }
-                                    }
+                                        // Native Gapless Swap: silently update the native queue item holding the URL
+                                        // This fetches the URL ahead of time without interrupting the currently playing track!
+                                        const latestQueue = await TrackPlayer.getQueue();
+                                        const latestIndex = await TrackPlayer.getActiveTrackIndex();
+                                        
+                                        // Revalidate: find actual index of targetNextId in latestQueue
+                                        const actualIndex = latestQueue.findIndex(t => t.id === targetNextId);
+
+                                        // Ensure target track is strictly after active track
+                                        if (latestIndex !== undefined && actualIndex !== -1 && latestIndex < actualIndex) {
+                                            const existingTrack = latestQueue[actualIndex];
+                                            // Only swap if URL actually changed to prevent disturbing native player unnecessarily
+                                            if (existingTrack?.id === targetNextId && existingTrack.url !== refreshed.url) {
+                                                console.log(`[PlayerService]: Natively swapping refreshed URL ahead of time for: ${refreshed.title} at index ${actualIndex}`);
+                                                await TrackPlayer.remove(actualIndex);
+                                                await TrackPlayer.add(refreshed, actualIndex);
+                                            }
+                                        }
+                                    });
                                 } catch (e) {
                                     console.error('[PlayerService]: Failed silent native queue swap:', e);
                                 }
@@ -172,100 +225,122 @@ export const PlaybackService = async function () {
         }
     });
 
-    // Handle end of queue: load recommendations and resume playback
+    // Handle end of queue: wrap around if repeat:queue is enabled, otherwise stop
     TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async (event) => {
-        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const { usePlayerStore, setPlaybackTransitionReason } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
 
-        // REHYDRATION GUARD: If the store hasn't rehydrated yet, repeatMode may still be the
-        // initial default ('off') even if the user had repeat enabled. Skip any side-effects
-        // until we have reliable persisted state.
+        console.log('[PlayerService]: PlaybackQueueEnded');
+
         if (!store.isRehydrated) {
-            console.log('[PlayerService]: Queue ended but store not yet rehydrated — ignoring.');
             return;
         }
 
-        // REPEAT GUARD: If repeat is active, let native TrackPlayer looping handle it.
-        if (store.repeatMode !== 'off') {
-            console.log(`[PlayerService]: Queue ended with repeat: ${store.repeatMode}, ignoring manual recommendation load.`);
-            return;
-        }
-
-        console.log('[PlayerService]: Queue ended, loading/waiting for recommendations...');
-        const lastTrack = store.currentTrack;
-
-        if (!lastTrack?.id) return;
-
-        try {
-            // This will now WAIT for any ongoing proactive load due to the new Promise guard in store
-            await store.loadRecommendations(lastTrack.id);
-
-            // After recommendations are added (or waited for), resume playback from the next available track
-            const queue = await TrackPlayer.getQueue();
-            const currentIndex = await TrackPlayer.getActiveTrackIndex();
-            const nextIndex = (currentIndex ?? -1) + 1;
-
-            if (queue.length > nextIndex) {
-                console.log(`[PlayerService]: Resuming from track index ${nextIndex}`);
-                await TrackPlayer.skip(nextIndex);
+        // If repeat:queue is active, wrap around to track 0
+        if (store.repeatMode === 'queue') {
+            try {
+                if (typeof setPlaybackTransitionReason === 'function') {
+                    setPlaybackTransitionReason('QUEUE_END');
+                }
+                await TrackPlayer.skip(0);
                 await TrackPlayer.play();
-                store.setIsPlaying(true);
-            } else {
-                console.log('[PlayerService]: No tracks found even after recommendation load.');
+            } catch (e) {
+                console.error('[PlayerService]: Failed to wrap queue on PlaybackQueueEnded:', e);
             }
-        } catch (e) {
-            console.error('[PlayerService]: Failed to continue after queue ended:', e);
         }
     });
 
     // Handle playback errors: attempt to refresh URL and retry before skipping
     TrackPlayer.addEventListener(Event.PlaybackError, async (event) => {
-        const { usePlayerStore } = require('../hooks/usePlayerStore');
+        const { usePlayerStore, getPlaybackGeneration, setPlaybackTransitionReason } = require('../hooks/usePlayerStore');
         const store = usePlayerStore.getState();
-        
-        console.error('[PlayerService]: Playback error:', event);
         
         try {
             const activeTrack = await TrackPlayer.getActiveTrack();
-            if (activeTrack && activeTrack.id) {
-                const attempt = (recoveryRetries.get(activeTrack.id) || 0) + 1;
+            const targetTrackId = activeTrack?.id;
+            const recoveryGen = typeof getPlaybackGeneration === 'function' ? getPlaybackGeneration() : 0;
+            
+            console.warn(`[PlaybackError] track=${targetTrackId ?? 'none'} code=${(event as any)?.code ?? 'unknown'} message=${(event as any)?.message ?? 'error'} generation=${recoveryGen}`);
+            
+            if (activeTrack && targetTrackId) {
+                const attempt = (recoveryRetries.get(targetTrackId) || 0) + 1;
                 
                 if (attempt <= MAX_RETRY_ATTEMPTS) {
-                    console.log(`[PlayerService]: Hyper-Persistent Recovery (Attempt ${attempt}/${MAX_RETRY_ATTEMPTS}) for: ${activeTrack.title}`);
-                    recoveryRetries.set(activeTrack.id, attempt);
+                    console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=started`);
+                    recoveryRetries.set(targetTrackId, attempt);
                     
                     // Small delay before retry to allow network to settle
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     
-                    const refreshed = await store.refreshTrackUrl(activeTrack.id);
-                    if (refreshed) {
-                        const currentIndex = await TrackPlayer.getActiveTrackIndex();
-                        if (currentIndex !== undefined) {
-                            await TrackPlayer.remove(currentIndex);
-                            await TrackPlayer.add(refreshed, currentIndex);
-                            await TrackPlayer.skip(currentIndex);
-                            await TrackPlayer.play();
-                            return;
-                        }
+                    // Post-delay validation: verify generation & active track haven't changed
+                    if (typeof getPlaybackGeneration === 'function' && getPlaybackGeneration() !== recoveryGen) {
+                        console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=aborted (generation changed)`);
+                        return;
+                    }
+                    const currentActive = await TrackPlayer.getActiveTrack();
+                    if (!currentActive || currentActive.id !== targetTrackId) {
+                        console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=aborted (active track changed)`);
+                        return;
+                    }
+
+                    const refreshed = await store.refreshTrackUrl(targetTrackId);
+                    
+                    if (refreshed && refreshed.id === targetTrackId) {
+                        await queueController.run(async () => {
+                            if (typeof getPlaybackGeneration === 'function' && getPlaybackGeneration() !== recoveryGen) {
+                                console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=aborted (generation changed post-refresh)`);
+                                return;
+                            }
+                            const postRefreshActive = await TrackPlayer.getActiveTrack();
+                            if (!postRefreshActive || postRefreshActive.id !== targetTrackId) {
+                                console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=aborted (active track changed post-refresh)`);
+                                return;
+                            }
+
+                            const currentQueue = await TrackPlayer.getQueue();
+                            const currentIndex = await TrackPlayer.getActiveTrackIndex();
+                            const targetIndex = currentQueue.findIndex(t => t.id === targetTrackId);
+
+                            // Ensure target track is found and is indeed the currently active track
+                            if (targetIndex !== -1 && currentIndex !== undefined && targetIndex === currentIndex) {
+                                console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=success`);
+                                if (typeof setPlaybackTransitionReason === 'function') {
+                                    setPlaybackTransitionReason('ERROR_RECOVERY');
+                                }
+                                await TrackPlayer.remove(targetIndex);
+                                await TrackPlayer.add(refreshed, targetIndex);
+                                await TrackPlayer.skip(targetIndex);
+                                await TrackPlayer.play();
+                            } else {
+                                console.log(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=aborted (index mismatch)`);
+                            }
+                        });
+                        return;
                     }
                 } else {
-                    console.warn(`[PlayerService]: MAX_ATTEMPTS reached for ${activeTrack.id}, giving up.`);
-                    recoveryRetries.delete(activeTrack.id);
+                    console.warn(`[PlaybackRecovery] track=${targetTrackId} attempt=${attempt} result=failed (MAX_RETRY_ATTEMPTS reached)`);
+                    recoveryRetries.delete(targetTrackId);
                 }
             }
             
             // Fallback: Stop trying instead of skipping uncontrollably
             console.log('[PlayerService]: Recovery unviable, stopping playback.');
-            // Removed safeSkipForward() based on user request avoiding skipping algorithm
         } catch (e) {
             console.error('[PlayerService]: Could not recover or skip after error:', e);
         }
     });
 
-    TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+    TrackPlayer.addEventListener(Event.PlaybackState, async (event) => {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const isPlaying = event.state === State.Playing;
         usePlayerStore.getState().setIsPlaying(isPlaying);
+        
+        if (event.state === State.Paused || event.state === State.Stopped) {
+            try {
+                const pos = await TrackPlayer.getPosition();
+                if (pos > 0) usePlayerStore.getState().setLastPosition(pos);
+            } catch (e) { }
+        }
     });
 
     let lastSavedSecond = 0;
@@ -273,8 +348,8 @@ export const PlaybackService = async function () {
         const { usePlayerStore } = require('../hooks/usePlayerStore');
         const currentSecond = Math.floor(event.position);
         
-        // Save position every 10 seconds or on track boundary
-        if (currentSecond !== lastSavedSecond && currentSecond % 10 === 0) {
+        // Save position every 5 seconds or on track boundary
+        if (currentSecond !== lastSavedSecond && currentSecond % 5 === 0) {
             lastSavedSecond = currentSecond;
             usePlayerStore.getState().setLastPosition(event.position);
         }

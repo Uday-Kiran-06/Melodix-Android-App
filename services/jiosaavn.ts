@@ -238,7 +238,8 @@ export const jioSaavnService = {
                         if (results.length > 0) {
                             const formatted = results.map((album: any) => ({
                                 ...album,
-                                name: jioSaavnService.decodeHtml(album.name),
+                                type: 'album',
+                                name: jioSaavnService.decodeHtml(album.name || album.title),
                                 image: album.image ? jioSaavnService.sanitizeImageUrl(album.image) : null,
                                 artists: {
                                     ...album.artists,
@@ -284,7 +285,8 @@ export const jioSaavnService = {
                         if (results.length > 0) {
                             const formatted = results.map((playlist: any) => ({
                                 ...playlist,
-                                name: jioSaavnService.decodeHtml(playlist.name),
+                                type: 'playlist',
+                                name: jioSaavnService.decodeHtml(playlist.name || playlist.title),
                                 image: playlist.image ? jioSaavnService.sanitizeImageUrl(playlist.image) : null
                             }));
                             allResults = [...allResults, ...formatted];
@@ -346,8 +348,11 @@ export const jioSaavnService = {
 
     getTrending: async (): Promise<Song[]> => {
         try {
-            // Priority for Telugu/Hindi on home screen as requested
-            const endpoints = [`${PRIMARY_BASE_URL}/trending?type=songs&language=telugu,hindi`, `${PRIMARY_BASE_URL}/modules?language=telugu,hindi,english`];
+            // Retrieve trending songs for supported languages (Telugu, Hindi, English)
+            const endpoints = [
+                `${PRIMARY_BASE_URL}/trending?type=songs&language=telugu,hindi,english`,
+                `${PRIMARY_BASE_URL}/modules?language=telugu,hindi,english`
+            ];
 
             for (const url of endpoints) {
                 try {
@@ -359,6 +364,7 @@ export const jioSaavnService = {
                         if (songs.length > 0) {
                             return songs.map((s: any) => ({
                                 ...s,
+                                type: 'song',
                                 name: jioSaavnService.decodeHtml(s.name),
                                 image: s.image ? jioSaavnService.sanitizeImageUrl(s.image) : null
                             }));
@@ -370,12 +376,14 @@ export const jioSaavnService = {
         } catch (error) {
             // Silently fallback to search to keep the UI populated without polluting terminal
             try {
-                const fallbackUrl = `${PRIMARY_BASE_URL}/search/songs?query=latest telugu songs 2024&limit=50`;
+                const currentYear = new Date().getFullYear();
+                const fallbackUrl = `${PRIMARY_BASE_URL}/search/songs?query=top trending songs ${currentYear}&limit=50`;
                 const fallbackResponse = await fetchWithTimeout(fallbackUrl);
                 if (!fallbackResponse.ok) return [];
                 const fallbackData: SearchResponse = await fallbackResponse.json();
                 return (fallbackData?.data?.results || []).map((s: any) => ({
                     ...s,
+                    type: 'song',
                     name: jioSaavnService.decodeHtml(s.name),
                     image: s.image ? jioSaavnService.sanitizeImageUrl(s.image) : null
                 }));
@@ -599,7 +607,10 @@ export const jioSaavnService = {
                 } catch (e) { }
             }
 
-            // Fallback: If both fail, build recommendations from Album, Artist, or Name
+            // Fallback: If both fail, build recommendations following Step 14 hierarchy:
+            // 1. Related / similar artist top hits
+            // 2. Similar songs search by name/genre
+            // 3. Album tracks ONLY as absolute final fallback (strictly limited to max 2 tracks)
             try {
                 const details = await jioSaavnService.getSongDetails(songId);
                 if (!details) return [];
@@ -607,35 +618,41 @@ export const jioSaavnService = {
                 const albumId = details.album?.id;
                 const artistName = details.artists?.primary?.[0]?.name;
                 const songName = details.name;
+                const songLanguage = details.language || '';
 
                 let fallbackSongs: Song[] = [];
 
-                // 1. Try Album
-                if (albumId) {
+                // 1. Try Artist Top Hits in same language
+                if (artistName && artistName !== 'Unknown Artist') {
                     try {
-                        const albumData = await jioSaavnService.getAlbumDetails(albumId);
-                        if (albumData?.songs) fallbackSongs = [...fallbackSongs, ...albumData.songs];
+                        const artistQuery = songLanguage ? `${songLanguage} ${artistName} top hits` : `${artistName} top hits`;
+                        const artistSongs = await jioSaavnService.searchSongs(artistQuery);
+                        if (artistSongs) fallbackSongs = [...fallbackSongs, ...artistSongs];
                     } catch (e) { }
                 }
 
-                // 2. Try Artist Top Hits
-                if (fallbackSongs.length < 5 && artistName) {
-                    try {
-                        const artistSongs = await jioSaavnService.searchSongs(`${artistName} top hits`);
-                        fallbackSongs = [...fallbackSongs, ...artistSongs];
-                    } catch (e) { }
-                }
-
-                // 3. Final Fallback: Search by Name (handles 500 errors on specific songs)
+                // 2. Similar Songs Search by Name/Language
                 if (fallbackSongs.length < 5 && songName) {
                     try {
-                        const searchSongs = await jioSaavnService.searchSongs(songName);
-                        fallbackSongs = [...fallbackSongs, ...searchSongs];
+                        const searchQuery = songLanguage ? `${songLanguage} ${songName}` : songName;
+                        const searchSongs = await jioSaavnService.searchSongs(searchQuery);
+                        if (searchSongs) fallbackSongs = [...fallbackSongs, ...searchSongs];
+                    } catch (e) { }
+                }
+
+                // 3. Final Fallback: Album tracks (limited to at most 2 tracks to prevent album domination)
+                if (fallbackSongs.length < 3 && albumId) {
+                    try {
+                        const albumData = await jioSaavnService.getAlbumDetails(albumId);
+                        if (albumData?.songs) {
+                            const otherAlbumSongs = albumData.songs.filter((s: any) => String(s.id) !== String(songId)).slice(0, 2);
+                            fallbackSongs = [...fallbackSongs, ...otherAlbumSongs];
+                        }
                     } catch (e) { }
                 }
 
                 return fallbackSongs
-                    .filter(s => s.id !== songId)
+                    .filter(s => String(s.id) !== String(songId))
                     .map(s => ({
                         ...s,
                         name: jioSaavnService.decodeHtml(s.name),

@@ -19,10 +19,11 @@ export const useInfiniteSongs = (query: string) => {
 
 export const useTrending = () => {
     return useQuery({
-        queryKey: ['trending'],
+        queryKey: ['trending-now'],
         queryFn: () => jioSaavnService.getTrending(),
-        staleTime: 1000 * 60 * 10,
-        gcTime: 1000 * 60 * 30,
+        staleTime: 1000 * 60 * 15, // 15-minute freshness window
+        gcTime: 1000 * 60 * 60 * 24, // 24-hour offline cache retention
+        refetchOnMount: true, // Revalidate when stale on mount
     });
 };
 
@@ -62,11 +63,11 @@ export const useNewReleases = () => {
     });
 };
 
-export const useSmartRecommendations = (keywords: string[]) => {
-    const query = keywords.length > 0 ? keywords.join(' ') + ' latest telugu hits' : 'top telugu hits';
+export const useSmartRecommendations = (keywords: string[], language: string = 'telugu') => {
+    const query = keywords.length > 0 ? `${keywords.join(' ')} latest ${language} hits` : `top ${language} hits`;
     return useQuery({
-        queryKey: ['smart-recommendations', query],
-        queryFn: () => jioSaavnService.searchSongs(query),
+        queryKey: ['smart-recommendations', query, language],
+        queryFn: () => jioSaavnService.searchSongs(query, language),
         staleTime: 1000 * 60 * 5,
     });
 };
@@ -117,10 +118,10 @@ export const useMovieAlbums = () => {
     });
 };
 
-export const useFeaturedPlaylists = () => {
+export const useFeaturedPlaylists = (language: string = 'telugu') => {
     return useQuery({
-        queryKey: ['featured-playlists'],
-        queryFn: () => jioSaavnService.searchPlaylists('telugu popular playlists'),
+        queryKey: ['featured-playlists', language],
+        queryFn: () => jioSaavnService.searchPlaylists(`${language} popular playlists`, language),
         staleTime: 1000 * 60 * 60 * 12,
         gcTime: 1000 * 60 * 60 * 48,
     });
@@ -138,10 +139,15 @@ export const useSmartAlbums = (keywords: string[]) => {
     });
 };
 
+import { filterCategoryTracks } from '@/services/LanguageEngine';
+
 export const useEnglishHits = () => {
     return useQuery({
         queryKey: ['english-hits'],
-        queryFn: () => jioSaavnService.searchSongs('top english pop hits billboard', 'english'),
+        queryFn: async () => {
+            const songs = await jioSaavnService.searchSongs('top english pop hits billboard', 'english');
+            return filterCategoryTracks(songs, 'english');
+        },
         staleTime: 1000 * 60 * 60 * 6,
         gcTime: 1000 * 60 * 60 * 24,
     });
@@ -157,7 +163,10 @@ export const useGlobalTrending = () => {
 export const useRetroTelugu = () => {
     return useQuery({
         queryKey: ['retro-telugu'],
-        queryFn: () => jioSaavnService.searchSongs('90s telugu golden hits', 'telugu'),
+        queryFn: async () => {
+            const songs = await jioSaavnService.searchSongs('90s telugu golden hits', 'telugu');
+            return filterCategoryTracks(songs, 'telugu');
+        },
         staleTime: 1000 * 60 * 60 * 24,
         gcTime: 1000 * 60 * 60 * 72,
     });
@@ -204,7 +213,10 @@ export const usePersonalizedLanguageHits = (language: string) => {
     const query = `top ${language} hits songs`;
     return useQuery({
         queryKey: ['personalized-lang-hits', language],
-        queryFn: () => jioSaavnService.searchSongs(query, language),
+        queryFn: async () => {
+            const songs = await jioSaavnService.searchSongs(query, language);
+            return filterCategoryTracks(songs, language);
+        },
         enabled: !!language,
         staleTime: 1000 * 60 * 60 * 3,
         gcTime: 1000 * 60 * 60 * 24,
@@ -218,7 +230,10 @@ export const usePersonalizedMoodHits = (mood: string, language: string) => {
     const query = `${mood} ${language} hits`;
     return useQuery({
         queryKey: ['personalized-mood', mood, language],
-        queryFn: () => jioSaavnService.searchSongs(query, language),
+        queryFn: async () => {
+            const songs = await jioSaavnService.searchSongs(query, language);
+            return filterCategoryTracks(songs, language);
+        },
         enabled: !!mood && !!language,
         staleTime: 1000 * 60 * 60,
         gcTime: 1000 * 60 * 60 * 24,
@@ -229,10 +244,14 @@ export const usePersonalizedMoodHits = (mood: string, language: string) => {
  * New releases biased toward the user's top language.
  */
 export const usePersonalizedNewReleases = (language: string) => {
-    const query = `latest new ${language} releases 2024 2025`;
+    const currentYear = new Date().getFullYear();
+    const query = `latest new ${language} releases ${currentYear}`;
     return useQuery({
         queryKey: ['personalized-new-releases', language],
-        queryFn: () => jioSaavnService.searchSongs(query, language),
+        queryFn: async () => {
+            const songs = await jioSaavnService.searchSongs(query, language);
+            return filterCategoryTracks(songs, language);
+        },
         enabled: !!language,
         staleTime: 1000 * 60 * 30,
         gcTime: 1000 * 60 * 60 * 24,
@@ -260,7 +279,10 @@ export const usePersonalizedRetro = (language: string) => {
     const query = `90s old classic ${language} hits`;
     return useQuery({
         queryKey: ['personalized-retro', language],
-        queryFn: () => jioSaavnService.searchSongs(query, language),
+        queryFn: async () => {
+            const songs = await jioSaavnService.searchSongs(query, language);
+            return filterCategoryTracks(songs, language);
+        },
         enabled: !!language,
         staleTime: 1000 * 60 * 60 * 24,
         gcTime: 1000 * 60 * 60 * 72,

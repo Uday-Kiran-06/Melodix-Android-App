@@ -213,7 +213,17 @@ class NativeAudioEffectsModule : Module() {
       try {
         val audioManager = appContext.reactContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         val configs = audioManager?.activePlaybackConfigurations
-        val ourConfig = configs?.find { it.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA }
+        val myUid = android.os.Process.myUid()
+        val ourConfig = configs?.find { 
+          val isOurUid = try {
+            val uidMethod = it.javaClass.getMethod("getClientUid")
+            val uid = uidMethod.invoke(it) as? Int
+            uid == null || uid == myUid
+          } catch (e: Exception) {
+            true
+          }
+          isOurUid && it.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA 
+        }
         
         val sessionId = ourConfig?.let {
            try {

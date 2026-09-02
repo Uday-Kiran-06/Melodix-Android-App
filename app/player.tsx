@@ -3,7 +3,7 @@ import { MusicImage } from '@/components/MusicImage';
 import PlaylistModal from '@/components/PlaylistModal';
 import SongMenu from '@/components/SongMenu';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
-import { usePlayerStore } from '@/hooks/usePlayerStore';
+import { usePlayerStore, setPlaybackTransitionReason } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { DesignSystem } from '@/constants/DesignSystem';
 import { jioSaavnService } from '@/services/jiosaavn';
@@ -95,6 +95,7 @@ export default function PlayerScreen() {
         addToQueue, removeFromQueue, isInQueue, queue,
         sleepTimer, remainingTime, setSleepTimer, syncedLyrics,
         isLoadingRecommendations, loadRecommendations,
+        recommendations, playTrack
     } = usePlayerStore();
     const { toggleLike, isLiked } = useLibraryStore();
     const { user } = useAuth();
@@ -267,6 +268,7 @@ export default function PlayerScreen() {
 
     const handleSkipToTrack = useCallback(async (index: number) => {
         try {
+            setPlaybackTransitionReason('USER_SELECTED_TRACK');
             await TrackPlayer.skip(index);
             setIsQueueVisible(false);
         } catch (e) {
@@ -289,14 +291,11 @@ export default function PlayerScreen() {
                 // RepeatMode.Queue active — native auto-wrap only works at natural track end.
                 // We must wrap explicitly with skip(0).
                 console.log('[Player]: repeat:queue wrap — skipping to track 0');
+                setPlaybackTransitionReason('USER_NEXT');
                 await TrackPlayer.skip(0);
                 await TrackPlayer.play();
-            } else {
-                // Rescue Mode: If skipping past the last track with repeat off, load more tracks first
-                if (isLastTrack && repeatMode === 'off' && currentTrack?.id) {
-                    console.log('[Player]: End of queue reached during manual skip, loading rescue tracks...');
-                    await loadRecommendations(currentTrack.id, true);
-                }
+            } else if (!isLastTrack) {
+                setPlaybackTransitionReason('USER_NEXT');
                 await TrackPlayer.skipToNext();
             }
         } catch (e) {
@@ -304,13 +303,14 @@ export default function PlayerScreen() {
         } finally {
             setTimeout(() => setIsSkipping(false), 500);
         }
-    }, [isSkipping, currentTrack, repeatMode, loadRecommendations]);
+    }, [isSkipping, repeatMode]);
 
     const handleSkipPrev = useCallback(async () => {
         if (isSkipping) return;
         setIsSkipping(true);
         try {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setPlaybackTransitionReason('USER_PREVIOUS');
             await TrackPlayer.skipToPrevious();
         } catch (e) {
             console.error("Skip previous failed:", e);
@@ -335,18 +335,6 @@ export default function PlayerScreen() {
         return index === -1 ? [] : queue.slice(index + 1);
     }, [queue, currentTrack?.id]);
 
-    // Split upcoming songs into user-queued vs auto-recommended
-    const userQueuedSongs = React.useMemo(() =>
-        // @ts-ignore
-        nextUpSongs.filter(t => !t.isRecommended),
-        [nextUpSongs]
-    );
-    const recommendedSongs = React.useMemo(() =>
-        // @ts-ignore
-        nextUpSongs.filter(t => t.isRecommended),
-        [nextUpSongs]
-    );
-
     const currentIndexInQueue = React.useMemo(() => {
         if (!queue || !currentTrack) return -1;
         return queue.findIndex(t => t.id === currentTrack.id);
@@ -357,7 +345,7 @@ export default function PlayerScreen() {
         return (
             <>
                 <Text style={{ color: DesignSystem.colors.primary }} className="font-bold mb-4">Now Playing</Text>
-                <View className="flex-row items-center mb-8 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
+                <View className="flex-row items-center mb-6 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
                     <MusicImage
                         images={jioSaavnService.sanitizeImageUrl(currentTrack.artwork || currentTrack.image)}
                         className="w-14 h-14 rounded-lg mr-4"
@@ -370,45 +358,43 @@ export default function PlayerScreen() {
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: DesignSystem.colors.primary }} />
                 </View>
 
-                {userQueuedSongs.length > 0 && (
-                    <Text className="text-white font-bold text-xl mb-4">Up Next</Text>
+                {nextUpSongs.length > 0 && (
+                    <>
+                        <Text className="text-white font-bold text-xl mb-4">In Queue ({nextUpSongs.length})</Text>
+                        {nextUpSongs.map((track, index) => (
+                            <TouchableOpacity
+                                key={`queue-${track.id}-${index}`}
+                                className="flex-row items-center mb-4"
+                                onPress={() => handleSkipToTrack(currentIndexInQueue + 1 + index)}
+                            >
+                                <MusicImage
+                                    images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
+                                    className="w-12 h-12 rounded-md mr-4"
+                                    transition={300}
+                                />
+                                <View className="flex-1">
+                                    <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>
+                                    <Text className="text-zinc-500 text-sm" numberOfLines={1}>{track.artist}</Text>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => removeFromQueue(track.id)}
+                                    className="p-2"
+                                >
+                                    <Trash2 size={16} color="#71717a" />
+                                </TouchableOpacity>
+                            </TouchableOpacity>
+                        ))}
+                    </>
                 )}
 
-                {/* User-queued songs */}
-                {userQueuedSongs.map((track, index) => (
-                    <TouchableOpacity
-                        key={`user-${track.id}-${index}`}
-                        className="flex-row items-center mb-4"
-                        onPress={() => handleSkipToTrack(currentIndexInQueue + 1 + index)}
-                    >
-                        <MusicImage
-                            images={jioSaavnService.sanitizeImageUrl(track.artwork || track.image)}
-                            className="w-12 h-12 rounded-md mr-4"
-                            transition={300}
-                        />
-                        <View className="flex-1">
-                            <Text className="text-white font-medium" numberOfLines={1}>{track.title}</Text>
-                            <Text className="text-zinc-500 text-sm" numberOfLines={1}>{track.artist}</Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={() => removeFromQueue(track.id)}
-                            className="p-2"
-                        >
-                            <Trash2 size={16} color="#71717a" />
-                        </TouchableOpacity>
-                    </TouchableOpacity>
-                ))}
-
-                {/* Recommended section header */}
-                {recommendedSongs.length > 0 && (
-                    <View className="flex-row items-center mb-4 mt-2">
-                        <Zap size={16} color={DesignSystem.colors.primary} />
-                        <Text style={{ color: DesignSystem.colors.primary }} className="font-bold text-xl ml-1">Recommended</Text>
-                    </View>
-                )}
+                {/* Up Next discovery section header (renamed from Recommended) */}
+                <View className="flex-row items-center mb-4 mt-2">
+                    <Zap size={18} color={DesignSystem.colors.primary} />
+                    <Text style={{ color: DesignSystem.colors.primary }} className="font-bold text-xl ml-1.5">Up Next</Text>
+                </View>
             </>
         );
-    }, [currentTrack, userQueuedSongs, recommendedSongs, currentIndexInQueue]);
+    }, [currentTrack, nextUpSongs, currentIndexInQueue]);
 
     if (!currentTrack) return null;
 
@@ -760,7 +746,7 @@ export default function PlayerScreen() {
                     </View>
 
                     <FlatList
-                        data={recommendedSongs}
+                        data={recommendations}
                         keyExtractor={(track, index) => `rec-${track.id}-${index}`}
                         className="px-6"
                         showsVerticalScrollIndicator={false}
@@ -768,12 +754,13 @@ export default function PlayerScreen() {
                         maxToRenderPerBatch={10}
                         windowSize={5}
                         ListHeaderComponent={renderQueueHeader}
-                        renderItem={({ item: track, index }) => (
+                        renderItem={({ item: track }) => (
                             <TouchableOpacity
                                 className="flex-row items-center mb-4"
-                                onPress={() => handleSkipToTrack(
-                                    currentIndexInQueue + 1 + userQueuedSongs.length + index
-                                )}
+                                onPress={() => {
+                                    playTrack(track);
+                                    setIsQueueVisible(false);
+                                }}
                             >
                                 <View className="relative">
                                     <MusicImage
@@ -790,19 +777,23 @@ export default function PlayerScreen() {
                                     </View>
                                 </View>
                                 <TouchableOpacity
-                                    onPress={() => removeFromQueue(track.id)}
+                                    onPress={async () => {
+                                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        addToQueue(track);
+                                        Alert.alert("Queue", `"${track.title}" added to queue`);
+                                    }}
                                     className="p-2"
                                 >
-                                    <Trash2 size={16} color="#52525b" />
+                                    <ListPlus size={18} color={DesignSystem.colors.primary} />
                                 </TouchableOpacity>
                             </TouchableOpacity>
                         )}
                         ListFooterComponent={() => (
                             <>
-                                {nextUpSongs.length === 0 && (
-                                    <View className="py-10 items-center">
+                                {recommendations.length === 0 && !isLoadingRecommendations && (
+                                    <View className="py-8 items-center">
                                         <Zap size={32} color={DesignSystem.colors.primary} style={{ opacity: 0.4 }} />
-                                        <Text className="text-zinc-500 text-center italic mt-2">Queue empty. Tap Load More for recommendations.</Text>
+                                        <Text className="text-zinc-500 text-center italic mt-2">No recommendations available. Tap Load More.</Text>
                                     </View>
                                 )}
 
@@ -819,7 +810,7 @@ export default function PlayerScreen() {
                                         {isLoadingRecommendations ? (
                                             <>
                                                 <ActivityIndicator size="small" color={DesignSystem.colors.primary} />
-                                                <Text style={{ color: DesignSystem.colors.primary }} className="ml-2 font-semibold">Loading recommendations...</Text>
+                                                <Text style={{ color: DesignSystem.colors.primary }} className="ml-2 font-semibold">Loading Up Next...</Text>
                                             </>
                                         ) : (
                                             <>

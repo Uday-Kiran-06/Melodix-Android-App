@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { getTrackLanguage, normalizeLanguage } from "@/services/LanguageEngine";
 
 interface HistoryState {
     recentKeywords: string[];
@@ -11,6 +12,7 @@ interface HistoryState {
     artistPreferences: Record<string, number>;
     getPreferredLanguages: () => string;
     getTopLanguages: (n?: number) => string[];
+    getLanguageWeights: () => Record<string, number>;
     getTopArtists: (n?: number) => string[];
     addTrackToHistory: (track: any) => void;
     addItemToHistory: (item: any) => void;
@@ -33,22 +35,43 @@ export const useHistoryStore = create<HistoryState>()(
             artistPreferences: {},
             getPreferredLanguages: () => {
                 const { languagePreferences } = get();
-                // Filter out falsy/undefined keys and empty strings
-                const validLangs = Object.entries(languagePreferences).filter(([k]) => k && k.trim() !== '' && k !== 'undefined');
-                const sortedLangs = validLangs
+                const validLangs = Object.entries(languagePreferences)
+                    .filter(([k, v]) => k && k.trim() !== '' && k !== 'undefined' && k !== 'unknown' && v > 0)
                     .sort(([, countA], [, countB]) => countB - countA)
                     .map(([lang]) => lang);
                 const defaults = ['telugu', 'hindi', 'english'];
-                return Array.from(new Set([...sortedLangs, ...defaults])).join(',');
+                return Array.from(new Set([...validLangs, ...defaults])).join(',');
             },
             getTopLanguages: (n = 3) => {
                 const { languagePreferences } = get();
                 const validLangs = Object.entries(languagePreferences)
-                    .filter(([k, v]) => k && k.trim() !== '' && k !== 'undefined' && v >= 3)
+                    .filter(([k, v]) => k && k.trim() !== '' && k !== 'undefined' && k !== 'unknown' && v > 0)
                     .sort(([, a], [, b]) => b - a)
                     .map(([lang]) => lang);
                 const defaults = ['telugu', 'hindi', 'english'];
                 return Array.from(new Set([...validLangs, ...defaults])).slice(0, n);
+            },
+            getLanguageWeights: () => {
+                const { languagePreferences } = get();
+                const supported = ['telugu', 'hindi', 'english'];
+                let total = 0;
+                const counts: Record<string, number> = {};
+
+                supported.forEach(lang => {
+                    const count = languagePreferences[lang] || 0;
+                    counts[lang] = count;
+                    total += count;
+                });
+
+                if (total === 0) {
+                    return { telugu: 0.50, hindi: 0.30, english: 0.20 };
+                }
+
+                const weights: Record<string, number> = {};
+                supported.forEach(lang => {
+                    weights[lang] = counts[lang] / total;
+                });
+                return weights;
             },
             getTopArtists: (n = 5) => {
                 const { artistPreferences, recentKeywords } = get();
@@ -81,11 +104,9 @@ export const useHistoryStore = create<HistoryState>()(
 
                 // Language Preferences
                 const newLanguagePreferences = { ...(get().languagePreferences || {}) };
-                if (item.language) {
-                    const lang = item.language.toLowerCase().trim();
-                    if (lang) {
-                        newLanguagePreferences[lang] = (newLanguagePreferences[lang] || 0) + 1;
-                    }
+                const detectedLang = getTrackLanguage(item);
+                if (detectedLang !== 'unknown') {
+                    newLanguagePreferences[detectedLang] = (newLanguagePreferences[detectedLang] || 0) + 1;
                 }
 
                 // Artist Preferences
