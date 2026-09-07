@@ -1,7 +1,7 @@
 import { SearchResponse, Song } from "../types/music";
 import { decodeHtml, sanitizeImageUrl } from "../utils/stringUtils";
 
-const PRIMARY_BASE_URL = process.env.EXPO_PUBLIC_SAAVN_API || "https://saavn.dev/api"; // Updated to stable dev instance
+const PRIMARY_BASE_URL = process.env.EXPO_PUBLIC_SAAVN_API || "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Updated to stable verified instance
 const SECONDARY_BASE_URL = "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Currently verified working
 const INTERNATIONAL_BASE_URL = "https://jio-saavn-api.vercel.app/api"; // English/International specialist
 const FALLBACK_BASE_URL = "https://saavn.revanced.dev/api"; // Extra fallback layer
