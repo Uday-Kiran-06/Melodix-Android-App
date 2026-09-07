@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { getTrackLanguage, normalizeLanguage } from "@/services/LanguageEngine";
+import { normalizeTrackTitle, normalizeArtistName } from "@/utils/stringUtils";
 
 interface HistoryState {
     recentKeywords: string[];
@@ -92,9 +93,23 @@ export const useHistoryStore = create<HistoryState>()(
                 const artistName = item.artist || item.artists?.primary?.[0]?.name;
 
                 const itemWithTimestamp = { ...item, playedAt: Date.now() };
+                const itemId = String(item.id);
+                const normTitle = normalizeTrackTitle(item.name || item.title);
+                const normArtist = normalizeArtistName(artistName);
+                const itemKey = normTitle ? `${normTitle}|${normArtist}` : null;
 
-                // Combined History (Tracks + Playlists/Albums)
-                const newItems = [itemWithTimestamp, ...recentlyPlayedItems.filter(i => i.id !== item.id)].slice(0, 20);
+                // Combined History (Tracks + Playlists/Albums) - deduplicate by ID and normalized title
+                const filtered = recentlyPlayedItems.filter(i => {
+                    if (String(i.id) === itemId) return false;
+                    if (itemKey) {
+                        const iArtist = i.artist || i.artists?.primary?.[0]?.name;
+                        const iKey = `${normalizeTrackTitle(i.name || i.title)}|${normalizeArtistName(iArtist)}`;
+                        if (iKey === itemKey) return false;
+                    }
+                    return true;
+                });
+
+                const newItems = [itemWithTimestamp, ...filtered].slice(0, 20);
 
                 // Keyword History
                 let newKeywords = recentKeywords;

@@ -46,3 +46,42 @@ export const sanitizeImageUrl = (images: any): string | null => {
   
   return sanitized;
 };
+
+/**
+ * Normalizes a song or track title for robust deduplication.
+ * Strips HTML entities, brackets, movie tags (From ...), lyrical/video/remix indicators,
+ * and punctuation, returning a canonical lowercase string.
+ */
+export const normalizeTrackTitle = (title: string | undefined | null): string => {
+  if (!title) return '';
+  let cleaned = decodeHtml(title).toLowerCase();
+
+  // Remove common parenthetical and bracketed suffixes (e.g., "(From Movie)", "[Lyrical Video]", "(Remix)")
+  cleaned = cleaned
+    .replace(/\((?:from|feat\.?|featuring|with|lyrical|video|full video|audio|official|original|remix|slowed|reverb|version|album version|soundtrack|ost|deluxe|bonus|re-issue|telugu|hindi|tamil|kannada|malayalam|punjabi|english)[^)]*\)/gi, '')
+    .replace(/\[(?:from|feat\.?|featuring|with|lyrical|video|full video|audio|official|original|remix|slowed|reverb|version|album version|soundtrack|ost|deluxe|bonus|re-issue|telugu|hindi|tamil|kannada|malayalam|punjabi|english)[^\]]*\]/gi, '')
+    .replace(/\s*-\s*(?:from|lyrical|video|full video|audio|official|original|remix|slowed|reverb|version|telugu|hindi|tamil|kannada|malayalam|punjabi|english|single|soundtrack)[^-\n]*$/gi, '');
+
+  // Strip generic (From ...) or [From ...] remnants
+  cleaned = cleaned
+    .replace(/\(from.*?\)/gi, '')
+    .replace(/\[from.*?\]/gi, '');
+
+  // Remove punctuation and special symbols, keeping unicode letters and numbers for Telugu, Hindi, English, etc.
+  cleaned = cleaned.replace(/[^\p{L}\p{N}\s]/gu, '');
+
+  // Normalize whitespace
+  return cleaned.replace(/\s+/g, ' ').trim();
+};
+
+/**
+ * Normalizes an artist name for comparison.
+ */
+export const normalizeArtistName = (artist: string | undefined | null): string => {
+  if (!artist) return '';
+  const decoded = decodeHtml(artist).toLowerCase();
+  // Take primary artist if comma-separated
+  const primary = decoded.split(/[,&/|]/)[0] || '';
+  return primary.replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
+};
+

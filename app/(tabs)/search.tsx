@@ -9,6 +9,7 @@ import { useSearch, useSearchAlbums, useSearchPlaylists } from '@/hooks/useMusic
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
+import { normalizeTrackTitle, normalizeArtistName } from '@/utils/stringUtils';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -173,12 +174,25 @@ export default function SearchScreen() {
       const items: any[] = [];
       
       if (recentlyPlayedTracks.length > 0) {
-        const todayItems = recentlyPlayedTracks.filter(t => {
+        // Deduplicate recently played tracks by ID and normalized title/artist
+        const seenRecent = new Set<string>();
+        const uniqueRecent = recentlyPlayedTracks.filter(t => {
+            const id = String(t.id);
+            const normTitle = normalizeTrackTitle(t.name || t.title);
+            const normArtist = normalizeArtistName(t.artists?.primary?.[0]?.name || t.artist);
+            const key = normTitle ? `${normTitle}|${normArtist}` : null;
+            if (seenRecent.has(id) || (key && seenRecent.has(key))) return false;
+            seenRecent.add(id);
+            if (key) seenRecent.add(key);
+            return true;
+        });
+
+        const todayItems = uniqueRecent.filter(t => {
             if (!t.playedAt) return false;
             const today = new Date().setHours(0,0,0,0);
             return t.playedAt >= today;
         });
-        const earlierItems = recentlyPlayedTracks.filter(t => !todayItems.includes(t));
+        const earlierItems = uniqueRecent.filter(t => !todayItems.includes(t));
 
         if (todayItems.length > 0) {
             items.push({ type: 'recent-header', title: 'Recently Played (Today)' });
@@ -198,12 +212,18 @@ export default function SearchScreen() {
     }
 
     if (query !== debouncedQuery) {
-        // Show local suggestions while waiting for debounce
+        // Show local suggestions while waiting for debounce (deduplicated by name)
+        const seenSuggestionNames = new Set<string>();
         const localMatches = recentlyPlayedTracks.filter(t => {
             const trackName = t.name?.toLowerCase() || '';
             const artistName = (t.artists?.primary?.[0]?.name || t.artist || '').toLowerCase();
             const searchLower = query.toLowerCase();
             return trackName.includes(searchLower) || artistName.includes(searchLower);
+        }).filter(t => {
+            const norm = normalizeTrackTitle(t.name);
+            if (!norm || seenSuggestionNames.has(norm)) return false;
+            seenSuggestionNames.add(norm);
+            return true;
         }).slice(0, 5);
 
         if (localMatches.length > 0) {
@@ -223,29 +243,32 @@ export default function SearchScreen() {
 
     const items: any[] = [];
     if (songs && songs.length > 0) {
-      const visibleSongs = showAllSongs ? songs : songs.slice(0, 5);
+      const uniqueSongs = jioSaavnService.deduplicateSongs(songs);
+      const visibleSongs = showAllSongs ? uniqueSongs : uniqueSongs.slice(0, 5);
       items.push({ type: 'section-header', title: 'Songs' });
       items.push(...visibleSongs.map(s => ({ ...s, type: 'song' })));
-      if (songs.length > 5) items.push({ type: 'toggle', target: 'songs', expanded: showAllSongs });
+      if (uniqueSongs.length > 5) items.push({ type: 'toggle', target: 'songs', expanded: showAllSongs });
     }
 
     if (albums && albums.length > 0) {
-      const visibleAlbums = showAllAlbums ? albums : albums.slice(0, 4);
+      const uniqueAlbums = jioSaavnService.deduplicateItems(albums);
+      const visibleAlbums = showAllAlbums ? uniqueAlbums : uniqueAlbums.slice(0, 4);
       items.push({ type: 'section-header', title: 'Albums' });
       // Group albums into pairs for grid-like feel in FlashList
       for (let i = 0; i < visibleAlbums.length; i += 2) {
         items.push({ type: 'album-row', items: visibleAlbums.slice(i, i + 2) });
       }
-      if (albums.length > 4) items.push({ type: 'toggle', target: 'albums', expanded: showAllAlbums });
+      if (uniqueAlbums.length > 4) items.push({ type: 'toggle', target: 'albums', expanded: showAllAlbums });
     }
 
     if (playlists && playlists.length > 0) {
-      const visiblePlaylists = showAllPlaylists ? playlists : playlists.slice(0, 4);
+      const uniquePlaylists = jioSaavnService.deduplicateItems(playlists);
+      const visiblePlaylists = showAllPlaylists ? uniquePlaylists : uniquePlaylists.slice(0, 4);
       items.push({ type: 'section-header', title: 'Playlists' });
       for (let i = 0; i < visiblePlaylists.length; i += 2) {
         items.push({ type: 'playlist-row', items: visiblePlaylists.slice(i, i + 2) });
       }
-      if (playlists.length > 4) items.push({ type: 'toggle', target: 'playlists', expanded: showAllPlaylists });
+      if (uniquePlaylists.length > 4) items.push({ type: 'toggle', target: 'playlists', expanded: showAllPlaylists });
     }
 
     return items;

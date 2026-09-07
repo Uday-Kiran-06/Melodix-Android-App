@@ -15,7 +15,7 @@ import { jioSaavnService } from "../services/jiosaavn";
 import { LrcLine, lyricsService } from "../services/lyrics";
 import { queueController } from "../services/QueueController";
 import { recommendationEngine } from "../services/RecommendationEngine";
-import { sanitizeImageUrl } from "../utils/stringUtils";
+import { sanitizeImageUrl, normalizeTrackTitle, normalizeArtistName } from "../utils/stringUtils";
 import { useSettingsStore } from "./useSettingsStore";
 
 interface PlayerState {
@@ -248,7 +248,40 @@ export const usePlayerStore = create<PlayerState>()(
                     rawSongData: trackData
                 };
 
-                let queueToPlay: Track[] = queueData.map(item => {
+                // Deduplicate incoming queueData so playback queues contain zero duplicates
+                const seenQueueIds = new Set<string>();
+                const seenQueueKeys = new Set<string>();
+                const activeTrackId = String(trackData.id);
+                const activeNormTitle = normalizeTrackTitle(trackData.name || trackData.title);
+                const activeNormArtist = normalizeArtistName(trackData.artists?.primary?.[0]?.name || trackData.artist);
+                const activeKey = activeNormTitle ? `${activeNormTitle}|${activeNormArtist}` : null;
+
+                const uniqueQueueRaw: any[] = [];
+                for (const item of (queueData || [])) {
+                    const itemId = String(item.id);
+                    const itemNormTitle = normalizeTrackTitle(item.name || item.title);
+                    const itemNormArtist = normalizeArtistName(item.artists?.primary?.[0]?.name || item.artist);
+                    const itemKey = itemNormTitle ? `${itemNormTitle}|${itemNormArtist}` : null;
+
+                    // Always preserve the active trackToPlay if matched
+                    if (itemId === activeTrackId || (activeKey && itemKey === activeKey)) {
+                        if (!seenQueueIds.has(itemId)) {
+                            seenQueueIds.add(itemId);
+                            if (itemKey) seenQueueKeys.add(itemKey);
+                            uniqueQueueRaw.push(item);
+                        }
+                        continue;
+                    }
+
+                    if (seenQueueIds.has(itemId)) continue;
+                    if (itemKey && seenQueueKeys.has(itemKey)) continue;
+
+                    seenQueueIds.add(itemId);
+                    if (itemKey) seenQueueKeys.add(itemKey);
+                    uniqueQueueRaw.push(item);
+                }
+
+                let queueToPlay: Track[] = uniqueQueueRaw.map(item => {
                     const localItem = downloadedSongs.find((s: any) => s.id === String(item.id));
                     return {
                         id: String(item.id),
@@ -432,6 +465,37 @@ export const usePlayerStore = create<PlayerState>()(
 
             addToQueue: async (track: Track) => {
                 return queueController.run(async () => {
+                    const state = get();
+                    const trackId = String(track.id);
+                    const normTitle = normalizeTrackTitle(track.title);
+                    const normArtist = normalizeArtistName(track.artist);
+                    const trackKey = normTitle ? `${normTitle}|${normArtist}` : null;
+
+                    // Check if already the active track
+                    const currentId = state.currentTrack?.id ? String(state.currentTrack.id) : null;
+                    const currentKey = state.currentTrack && normalizeTrackTitle(state.currentTrack.title)
+                        ? `${normalizeTrackTitle(state.currentTrack.title)}|${normalizeArtistName(state.currentTrack.artist)}`
+                        : null;
+                    if (trackId === currentId || (trackKey && trackKey === currentKey)) {
+                        console.log(`[Player]: Track "${track.title}" is currently playing. Skipping duplicate queue add.`);
+                        return;
+                    }
+
+                    // Check if already present in queue
+                    const alreadyInQueue = state.queue.some(t => {
+                        if (String(t.id) === trackId) return true;
+                        if (trackKey) {
+                            const tKey = `${normalizeTrackTitle(t.title)}|${normalizeArtistName(t.artist)}`;
+                            return tKey === trackKey;
+                        }
+                        return false;
+                    });
+
+                    if (alreadyInQueue) {
+                        console.log(`[Player]: Track "${track.title}" is already in queue. Skipping duplicate queue add.`);
+                        return;
+                    }
+
                     const currentIndex = await TrackPlayer.getActiveTrackIndex();
                     const playerQueue = await TrackPlayer.getQueue();
                     const insertIndex = currentIndex !== undefined && currentIndex >= 0
@@ -440,10 +504,10 @@ export const usePlayerStore = create<PlayerState>()(
 
                     await TrackPlayer.add(track, insertIndex);
 
-                    set((state) => {
-                        const newQueue = [...state.queue];
-                        const storeCurrentIndex = state.currentTrack 
-                            ? state.queue.findIndex(t => t.id === state.currentTrack?.id)
+                    set((s) => {
+                        const newQueue = [...s.queue];
+                        const storeCurrentIndex = s.currentTrack 
+                            ? s.queue.findIndex(t => t.id === s.currentTrack?.id)
                             : -1;
                         const storeInsertIndex = storeCurrentIndex !== -1 
                             ? Math.min(storeCurrentIndex + 1, newQueue.length)
@@ -451,7 +515,7 @@ export const usePlayerStore = create<PlayerState>()(
                         newQueue.splice(storeInsertIndex, 0, track);
                         return {
                             queue: newQueue,
-                            originalQueue: [...state.originalQueue, track]
+                            originalQueue: [...s.originalQueue, track]
                         };
                     });
                 });
@@ -677,11 +741,28 @@ export const usePlayerStore = create<PlayerState>()(
                     // Record newly received recommendation IDs into session deduplication
                     cleanTracks.forEach(t => sessionRecommendedIds.add(t.id));
 
+                    // Strictly filter out any recommendations that match currentTrack or tracks already in queue
+                    const currentState = get();
+                    const currentId = currentState.currentTrack?.id ? String(currentState.currentTrack.id) : null;
+                    const currentKey = currentState.currentTrack && normalizeTrackTitle(currentState.currentTrack.title)
+                        ? `${normalizeTrackTitle(currentState.currentTrack.title)}|${normalizeArtistName(currentState.currentTrack.artist)}`
+                        : null;
+                    const existingQueueIds = new Set(currentState.queue.map(t => String(t.id)));
+                    const existingQueueKeys = new Set(currentState.queue.map(t => `${normalizeTrackTitle(t.title)}|${normalizeArtistName(t.artist)}`));
+
+                    const nonDuplicateRecs = cleanTracks.filter(t => {
+                        const tId = String(t.id);
+                        if (tId === currentId || existingQueueIds.has(tId)) return false;
+                        const tKey = `${normalizeTrackTitle(t.title)}|${normalizeArtistName(t.artist)}`;
+                        if (tKey && (tKey === currentKey || existingQueueKeys.has(tKey))) return false;
+                        return true;
+                    });
+
                     if (isManual) {
                         // Append uniquely to existing recommendations list
                         set((state) => {
                             const existingIds = new Set(state.recommendations.map(t => t.id));
-                            const uniqueTracks = cleanTracks.filter(t => !existingIds.has(t.id));
+                            const uniqueTracks = nonDuplicateRecs.filter(t => !existingIds.has(t.id));
                             return {
                                 recommendations: [...state.recommendations, ...uniqueTracks],
                                 isLoadingRecommendations: false
@@ -690,23 +771,23 @@ export const usePlayerStore = create<PlayerState>()(
                     } else {
                         // Replace recommendations list for new seed track
                         set({
-                            recommendations: cleanTracks,
+                            recommendations: nonDuplicateRecs,
                             isLoadingRecommendations: false
                         });
 
                         // If user is playing a single/random track (queue size <= 1), auto-populate the native queue
                         // so playback continues gaplessly and skip-to-next works seamlessly.
-                        if (get().queue.length <= 1 && cleanTracks.length > 0) {
+                        if (get().queue.length <= 1 && nonDuplicateRecs.length > 0) {
                             try {
                                 await queueController.run(async () => {
                                     if (playbackGeneration !== targetGen) return;
                                     const currentNativeQueue = await TrackPlayer.getQueue();
                                     if (currentNativeQueue.length <= 1) {
-                                        console.log(`[Player]: Auto-appending ${cleanTracks.length} recommendations to native TrackPlayer queue`);
-                                        await TrackPlayer.add(cleanTracks);
+                                        console.log(`[Player]: Auto-appending ${nonDuplicateRecs.length} recommendations to native TrackPlayer queue`);
+                                        await TrackPlayer.add(nonDuplicateRecs);
                                         set((state) => ({
-                                            queue: [...state.queue, ...cleanTracks],
-                                            originalQueue: [...state.originalQueue, ...cleanTracks],
+                                            queue: [...state.queue, ...nonDuplicateRecs],
+                                            originalQueue: [...state.originalQueue, ...nonDuplicateRecs],
                                         }));
                                     }
                                 });

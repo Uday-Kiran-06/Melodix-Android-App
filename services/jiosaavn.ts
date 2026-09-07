@@ -1,5 +1,5 @@
 import { SearchResponse, Song } from "../types/music";
-import { decodeHtml, sanitizeImageUrl } from "../utils/stringUtils";
+import { decodeHtml, sanitizeImageUrl, normalizeTrackTitle, normalizeArtistName } from "../utils/stringUtils";
 
 const PRIMARY_BASE_URL = process.env.EXPO_PUBLIC_SAAVN_API || "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Updated to stable verified instance
 const SECONDARY_BASE_URL = "https://jiosaavn-api-cyan-theta.vercel.app/api"; // Currently verified working
@@ -185,8 +185,7 @@ export const jioSaavnService = {
                         const data: SearchResponse = await safeParseJson(response);
                         const results = data?.data?.results || [];
                         if (results.length > 0) {
-                            const deduplicatedResults = jioSaavnService.deduplicateSongs(results);
-                            return deduplicatedResults.map(song => ({
+                            const formatted = results.map(song => ({
                                 ...song,
                                 name: jioSaavnService.decodeHtml(song.name),
                                 image: song.image ? jioSaavnService.sanitizeImageUrl(song.image) : null,
@@ -199,6 +198,7 @@ export const jioSaavnService = {
                                     }))
                                 }
                             }));
+                            return jioSaavnService.deduplicateSongs(formatted);
                         }
                     } else {
                         console.warn(`[API Response Error] Provider ${baseUrl} returned status: ${response.status}`);
@@ -307,43 +307,108 @@ export const jioSaavnService = {
 
 
     deduplicateItems: (items: any[]): any[] => {
-        const seen = new Set();
+        if (!items || !Array.isArray(items)) return [];
+        const seenIds = new Set<string>();
+        const seenKeys = new Set<string>();
         return items.filter(item => {
-            if (!item.id) return true;
-            const duplicate = seen.has(item.id);
-            seen.add(item.id);
-            return !duplicate;
+            if (!item) return false;
+            const id = item.id ? String(item.id) : null;
+            if (id && seenIds.has(id)) return false;
+
+            const name = item.name || item.title || '';
+            const normName = normalizeTrackTitle(name);
+            const artist = item.artists?.primary?.[0]?.name || item.artist || '';
+            const normArtist = normalizeArtistName(artist);
+            const typeKey = `${item.type || 'item'}|${normName}|${normArtist}`;
+
+            if (normName && seenKeys.has(typeKey)) return false;
+
+            if (id) seenIds.add(id);
+            if (normName) seenKeys.add(typeKey);
+            return true;
         });
     },
 
     deduplicateSongs: (songs: Song[]): Song[] => {
-        const seen = new Map<string, Song>();
+        if (!songs || !Array.isArray(songs)) return [];
+        const seenById = new Map<string, Song>();
+        const seenByKey = new Map<string, Song>();
 
-        songs.forEach(song => {
-            const primaryArtist = song.artists?.primary?.[0]?.name || "Unknown";
-            const key = `${song.name.toLowerCase().trim()}|${primaryArtist.toLowerCase().trim()}`;
+        const getQualityScore = (song: Song): number => {
+            let score = 0;
+            // 1. Bitrate / download quality availability
+            if (Array.isArray(song.downloadUrl)) {
+                if (song.downloadUrl.some((d: any) => d.quality === '320kbps')) score += 50;
+                else if (song.downloadUrl.some((d: any) => d.quality === '160kbps')) score += 30;
+                else if (song.downloadUrl.length > 0) score += 15;
+            } else if (song.url) {
+                score += 10;
+            }
 
-            const existing = seen.get(key);
+            // 2. Penalize titles that retain noisy bracket/lyrical/video tags
+            const rawName = (song.name || '').toLowerCase();
+            if (rawName.includes('lyrical') || rawName.includes('teaser') || rawName.includes('clip')) {
+                score -= 25;
+            }
+            if (rawName.includes('(from') || rawName.includes('[from')) {
+                score -= 5;
+            }
+
+            // 3. Audio duration validity (>60 seconds)
+            const duration = Number(song.duration) || 0;
+            if (duration > 60) score += 15;
+            else if (duration > 0 && duration < 60) score -= 30;
+
+            // 4. Play count / popularity
+            if (song.playCount) {
+                const count = Number(song.playCount) || 0;
+                if (count > 0) score += Math.min(25, Math.log10(count + 1) * 3);
+            }
+
+            // 5. Richness of metadata
+            if (song.album?.name && song.album.name !== 'Single') score += 5;
+            if (song.image) score += 5;
+            return score;
+        };
+
+        for (const rawSong of songs) {
+            if (!rawSong) continue;
+            const songId = rawSong.id ? String(rawSong.id) : null;
+            const primaryArtist = rawSong.artists?.primary?.[0]?.name || (rawSong as any).artist || "Unknown";
+            const normTitle = normalizeTrackTitle(rawSong.name);
+            const normArtist = normalizeArtistName(primaryArtist);
+            const songKey = normTitle ? `${normTitle}|${normArtist}` : (songId ? `id:${songId}` : null);
+
+            if (!songKey && !songId) continue;
+
+            const existingById = songId ? seenById.get(songId) : undefined;
+            const existingByKey = songKey ? seenByKey.get(songKey) : undefined;
+            const existing = existingByKey || existingById;
+
             if (!existing) {
-                seen.set(key, song);
+                if (songId) seenById.set(songId, rawSong);
+                if (songKey) seenByKey.set(songKey, rawSong);
             } else {
-                // Priority logic: Prefer the one WITHOUT "(From ...)" or shorter name if both have it
-                // Also prefer ones with higher play count or better metadata if available
-                const isExistingOriginal = !existing.name.includes('(From');
-                const isCurrentOriginal = !song.name.includes('(From');
+                const existingScore = getQualityScore(existing);
+                const currentScore = getQualityScore(rawSong);
 
-                if (isCurrentOriginal && !isExistingOriginal) {
-                    seen.set(key, song);
-                } else if (isCurrentOriginal === isExistingOriginal) {
-                    // If both are same type, keep the one with more information (e.g., duration or year)
-                    if ((song.playCount || 0) > (existing.playCount || 0)) {
-                        seen.set(key, song);
-                    }
+                if (currentScore > existingScore) {
+                    const existingId = existing.id ? String(existing.id) : null;
+                    const existingPrimaryArtist = existing.artists?.primary?.[0]?.name || (existing as any).artist || "Unknown";
+                    const existingKey = normalizeTrackTitle(existing.name)
+                        ? `${normalizeTrackTitle(existing.name)}|${normalizeArtistName(existingPrimaryArtist)}`
+                        : null;
+
+                    if (existingId) seenById.delete(existingId);
+                    if (existingKey) seenByKey.delete(existingKey);
+
+                    if (songId) seenById.set(songId, rawSong);
+                    if (songKey) seenByKey.set(songKey, rawSong);
                 }
             }
-        });
+        }
 
-        return Array.from(seen.values());
+        return Array.from(new Set([...seenByKey.values(), ...seenById.values()]));
     },
 
     getTrending: async (): Promise<Song[]> => {
