@@ -210,7 +210,14 @@ export default function SongDetailsScreen() {
 
                         {/* Centered Main Content */}
                         <View className="flex-1 justify-center items-center">
-                            <View className="shadow-2xl">
+                            <TouchableOpacity
+                                activeOpacity={song.album?.id ? 0.85 : 1}
+                                disabled={!song.album?.id}
+                                onPress={() => {
+                                    if (song.album?.id) router.push(`/album/${song.album.id}`);
+                                }}
+                                className="shadow-2xl"
+                            >
                                 <Image
                                     source={jioSaavnService.sanitizeImageUrl(song.image) ? { uri: jioSaavnService.sanitizeImageUrl(song.image) } : require('../../assets/images/favicon.png')}
                                     style={{ width: width * 0.85, height: width * 0.85 }}
@@ -227,14 +234,23 @@ export default function SongDetailsScreen() {
                                         />
                                     </View>
                                 )}
-                            </View>
+                            </TouchableOpacity>
 
                             <View className="mt-10 items-center px-4 w-full">
                                 <Text className="text-white text-3xl font-bold text-center mb-2" numberOfLines={2}>{song.name}</Text>
                                 <Text className="text-emerald-500 text-xl font-medium text-center">{song?.artists.primary?.[0]?.name}</Text>
-                                <Text className="text-zinc-500 mt-3 uppercase tracking-widest text-xs font-semibold">
-                                    {song.album?.name || "Single"} • {song.year || "Unknown"}
-                                </Text>
+                                <TouchableOpacity
+                                    activeOpacity={song.album?.id ? 0.7 : 1}
+                                    disabled={!song.album?.id}
+                                    onPress={() => {
+                                        if (song.album?.id) router.push(`/album/${song.album.id}`);
+                                    }}
+                                    className="mt-3 py-1 px-3 rounded-full bg-white/5"
+                                >
+                                    <Text className="text-zinc-400 uppercase tracking-widest text-xs font-semibold">
+                                        {song.album?.name || "Single"} • {song.year || "Unknown"}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
 
                             {/* Controls Row */}

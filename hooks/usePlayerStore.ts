@@ -53,6 +53,7 @@ interface PlayerState {
     loadLyrics: (track: Track) => Promise<void>;
     clearRecommendationHistory: () => void;
     refreshTrackUrl: (trackId: string) => Promise<Track | null>;
+    playNextRecommendation: () => Promise<void>;
 }
 
 // Map quality selection to JioSaavn API download link keys
@@ -83,8 +84,7 @@ export const getTrackUrl = (trackData: any, quality: keyof typeof qualityMap): s
 export const cleanMetadata = (val: any, fallback: string | undefined): string | undefined => {
     if (val === null || val === undefined || val === "null" || val === "undefined") return fallback;
     const str = String(val).trim();
-    if (str === "" || str === "[object Object]") return fallback;
-    return str;
+    return str.length > 0 ? str : fallback;
 };
 
 let timerInterval: NodeJS.Timeout | null = null;
@@ -107,6 +107,7 @@ export type PlaybackTransitionReason =
     | 'REMOTE_SELECTED_TRACK'
     | 'ERROR_RECOVERY'
     | 'PLAYBACK_START'
+    | 'AUTOPLAY_ADVANCE'
     | 'UNKNOWN';
 
 let currentTransitionReason: PlaybackTransitionReason = 'PLAYBACK_START';
@@ -240,7 +241,11 @@ export const usePlayerStore = create<PlayerState>()(
                     // @ts-ignore
                     originalDownloadUrl: trackData.downloadUrl,
                     // @ts-ignore
-                    originalUrl: trackData.url
+                    originalUrl: trackData.url,
+                    // @ts-ignore
+                    albumId: trackData.album?.id ? String(trackData.album.id) : (trackData.albumId ? String(trackData.albumId) : undefined),
+                    // @ts-ignore
+                    rawSongData: trackData
                 };
 
                 let queueToPlay: Track[] = queueData.map(item => {
@@ -262,7 +267,11 @@ export const usePlayerStore = create<PlayerState>()(
                         // @ts-ignore - Custom property to store remote metadata
                         originalDownloadUrl: item.downloadUrl,
                         // @ts-ignore - Custom property to store remote metadata
-                        originalUrl: item.url
+                        originalUrl: item.url,
+                        // @ts-ignore
+                        albumId: item.album?.id ? String(item.album.id) : (item.albumId ? String(item.albumId) : undefined),
+                        // @ts-ignore
+                        rawSongData: item
                     };
                 });
 
@@ -658,7 +667,11 @@ export const usePlayerStore = create<PlayerState>()(
                         // @ts-ignore
                         originalDownloadUrl: s.downloadUrl,
                         // @ts-ignore
-                        originalUrl: s.url
+                        originalUrl: s.url,
+                        // @ts-ignore
+                        albumId: s.album?.id ? String(s.album.id) : undefined,
+                        // @ts-ignore
+                        rawSongData: s
                     }));
 
                     // Record newly received recommendation IDs into session deduplication
@@ -680,12 +693,113 @@ export const usePlayerStore = create<PlayerState>()(
                             recommendations: cleanTracks,
                             isLoadingRecommendations: false
                         });
+
+                        // If user is playing a single/random track (queue size <= 1), auto-populate the native queue
+                        // so playback continues gaplessly and skip-to-next works seamlessly.
+                        if (get().queue.length <= 1 && cleanTracks.length > 0) {
+                            try {
+                                await queueController.run(async () => {
+                                    if (playbackGeneration !== targetGen) return;
+                                    const currentNativeQueue = await TrackPlayer.getQueue();
+                                    if (currentNativeQueue.length <= 1) {
+                                        console.log(`[Player]: Auto-appending ${cleanTracks.length} recommendations to native TrackPlayer queue`);
+                                        await TrackPlayer.add(cleanTracks);
+                                        set((state) => ({
+                                            queue: [...state.queue, ...cleanTracks],
+                                            originalQueue: [...state.originalQueue, ...cleanTracks],
+                                        }));
+                                    }
+                                });
+                            } catch (appendErr) {
+                                console.error("[Player]: Failed to auto-append recommendations to queue:", appendErr);
+                            }
+                        }
                     }
                 } catch (error) {
                     console.error("[Player]: Failed to load Up Next recommendations:", error);
                 } finally {
                     if (playbackGeneration === targetGen) {
                         set({ isLoadingRecommendations: false });
+                    }
+                }
+            },
+
+            playNextRecommendation: async () => {
+                console.log('[Player]: playNextRecommendation invoked');
+                const state = get();
+                const { recommendations, currentTrack } = state;
+
+                // 1. Check if the native player already has an upcoming track in its queue
+                try {
+                    const activeIndex = await TrackPlayer.getActiveTrackIndex();
+                    const nativeQueue = await TrackPlayer.getQueue();
+                    if (activeIndex !== undefined && activeIndex < nativeQueue.length - 1) {
+                        console.log(`[Player]: Skipping to next existing track in native queue (index ${activeIndex + 1})`);
+                        setPlaybackTransitionReason('AUTOPLAY_ADVANCE');
+                        await TrackPlayer.skipToNext();
+                        await TrackPlayer.play();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[Player]: Failed to check native queue for next track:', e);
+                }
+
+                // 2. If recommendations are available in memory, play the top recommendation
+                if (recommendations && recommendations.length > 0) {
+                    const nextTrack = recommendations[0];
+                    const remainingRecs = recommendations.slice(1);
+                    console.log(`[Player]: Autoplaying top recommendation: ${nextTrack.title}`);
+                    set({ recommendations: remainingRecs });
+                    setPlaybackTransitionReason('AUTOPLAY_ADVANCE');
+                    await get().playTrack(nextTrack, [nextTrack, ...remainingRecs]);
+                    return;
+                }
+
+                // 3. Fallback: fetch recommendations on the fly using the current track as seed
+                if (currentTrack?.id) {
+                    try {
+                        console.log(`[Player]: On-demand fetching recommendations for autoplay seed: ${currentTrack.id}`);
+                        const candidates = await recommendationEngine.getRecommendations(
+                            currentTrack.id,
+                            currentTrack,
+                            new Set([currentTrack.id]),
+                            sessionRecommendedIds,
+                            false
+                        );
+
+                        if (candidates && candidates.length > 0) {
+                            const selectedQuality = useSettingsStore.getState().audioQuality;
+                            const cleanTracks: Track[] = candidates.map((s) => ({
+                                id: String(s.id),
+                                url: getTrackUrl(s, selectedQuality),
+                                title: cleanMetadata(s.name, "Unknown Track"),
+                                artist: cleanMetadata(s.artists?.primary?.[0]?.name, "Unknown Artist"),
+                                artwork: cleanMetadata(sanitizeImageUrl(s.image), undefined),
+                                album: cleanMetadata(s.album?.name, "Single"),
+                                description: cleanMetadata(s.name, "Unknown Track"),
+                                genre: cleanMetadata(s.language, "Music"),
+                                ...(Number(s.duration) > 0 ? { duration: Number(s.duration) } : {}),
+                                isLiveStream: false,
+                                // @ts-ignore
+                                originalDownloadUrl: s.downloadUrl,
+                                // @ts-ignore
+                                originalUrl: s.url,
+                                // @ts-ignore
+                                albumId: s.album?.id ? String(s.album.id) : undefined,
+                                // @ts-ignore
+                                rawSongData: s
+                            }));
+
+                            cleanTracks.forEach(t => sessionRecommendedIds.add(t.id));
+                            const nextTrack = cleanTracks[0];
+                            const remainingRecs = cleanTracks.slice(1);
+                            set({ recommendations: remainingRecs });
+                            setPlaybackTransitionReason('AUTOPLAY_ADVANCE');
+                            await get().playTrack(nextTrack, [nextTrack, ...remainingRecs]);
+                            return;
+                        }
+                    } catch (fetchErr) {
+                        console.error('[Player]: On-demand recommendation fetch failed:', fetchErr);
                     }
                 }
             },

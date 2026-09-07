@@ -23,8 +23,16 @@ export const PlaybackService = async function () {
 
     const safeSkipForward = async () => {
         try {
-            await TrackPlayer.skipToNext();
-            await TrackPlayer.play();
+            const currentIndex = await TrackPlayer.getActiveTrackIndex();
+            const queue = await TrackPlayer.getQueue();
+            const isLast = currentIndex === undefined || currentIndex >= queue.length - 1;
+            if (!isLast) {
+                await TrackPlayer.skipToNext();
+                await TrackPlayer.play();
+            } else {
+                const { usePlayerStore } = require('../hooks/usePlayerStore');
+                await usePlayerStore.getState().playNextRecommendation();
+            }
         } catch (e) {
             console.error('[PlayerService]: safeSkipForward failed:', e);
         }
@@ -246,6 +254,13 @@ export const PlaybackService = async function () {
                 await TrackPlayer.play();
             } catch (e) {
                 console.error('[PlayerService]: Failed to wrap queue on PlaybackQueueEnded:', e);
+            }
+        } else if (store.repeatMode !== 'track') {
+            console.log('[PlayerService]: PlaybackQueueEnded - triggering autoplay for next song');
+            try {
+                await store.playNextRecommendation();
+            } catch (e) {
+                console.error('[PlayerService]: Failed to autoplay next recommendation on PlaybackQueueEnded:', e);
             }
         }
     });

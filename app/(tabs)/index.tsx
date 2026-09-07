@@ -361,7 +361,7 @@ export default function HomeScreen() {
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
-  const renderSection = useCallback(({ title, data, loading, cardType }: any) => {
+  const renderSection = useCallback(({ id: sectionId, title, data, loading, cardType }: any) => {
     const type = cardType === 'rectangle' ? 'rectangle' : 'square';
     if (loading) return <SectionShimmer isDark={isDark} type={type} />;
     if (!data?.length) return null;
@@ -376,9 +376,11 @@ export default function HomeScreen() {
             <SongCard
               item={item}
               onPress={() => {
-                if (item.type === 'album') {
+                const isAlbum = sectionId === 'albums' || item.type?.toLowerCase() === 'album';
+                const isPlaylist = sectionId === 'playlists' || item.type?.toLowerCase() === 'playlist';
+                if (isAlbum) {
                   router.push(`/album/${item.id}` as any);
-                } else if (item.type === 'playlist') {
+                } else if (isPlaylist) {
                   router.push(`/saavn-playlist/${item.id}` as any);
                 } else {
                   goSong(item.id);

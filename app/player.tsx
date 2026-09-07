@@ -95,7 +95,7 @@ export default function PlayerScreen() {
         addToQueue, removeFromQueue, isInQueue, queue,
         sleepTimer, remainingTime, setSleepTimer, syncedLyrics,
         isLoadingRecommendations, loadRecommendations,
-        recommendations, playTrack
+        recommendations, playTrack, playNextRecommendation
     } = usePlayerStore();
     const { toggleLike, isLiked } = useLibraryStore();
     const { user } = useAuth();
@@ -111,6 +111,19 @@ export default function PlayerScreen() {
     const [dragPosition, setDragPosition] = React.useState(0);
     const [downloadProgress, setDownloadProgress] = React.useState<number | null>(null);
     const scrollViewRef = React.useRef<ScrollView>(null);
+
+    const handleGoToAlbum = useCallback(async () => {
+        let targetAlbumId = (currentTrack as any)?.albumId || (currentTrack as any)?.rawSongData?.album?.id;
+        if (!targetAlbumId && currentTrack?.id) {
+            try {
+                const details = await jioSaavnService.getSongDetails(currentTrack.id);
+                targetAlbumId = details?.album?.id;
+            } catch (e) { }
+        }
+        if (targetAlbumId) {
+            router.push(`/album/${targetAlbumId}`);
+        }
+    }, [currentTrack, router]);
 
     const handleDownload = async () => {
         if (!currentTrack || !currentTrack.url) return;
@@ -297,13 +310,17 @@ export default function PlayerScreen() {
             } else if (!isLastTrack) {
                 setPlaybackTransitionReason('USER_NEXT');
                 await TrackPlayer.skipToNext();
+            } else {
+                console.log('[Player]: Last track reached — playing next recommended song');
+                setPlaybackTransitionReason('USER_NEXT');
+                await playNextRecommendation();
             }
         } catch (e) {
             console.error('Skip next failed:', e);
         } finally {
             setTimeout(() => setIsSkipping(false), 500);
         }
-    }, [isSkipping, repeatMode]);
+    }, [isSkipping, repeatMode, playNextRecommendation]);
 
     const handleSkipPrev = useCallback(async () => {
         if (isSkipping) return;
@@ -428,10 +445,14 @@ export default function PlayerScreen() {
                     <TouchableOpacity onPress={() => router.back()}>
                         <ChevronDown size={32} color="#fff" />
                     </TouchableOpacity>
-                    <View className="items-center">
-                        <Text className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Playing from</Text>
-                        <Text className="text-white font-bold text-xs">MELODIX PLAYER</Text>
-                    </View>
+                    <TouchableOpacity onPress={handleGoToAlbum} activeOpacity={0.8} className="items-center max-w-[200px]">
+                        <Text className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">
+                            {currentTrack?.album && currentTrack.album !== 'Single' ? 'Playing from Album' : 'Playing from'}
+                        </Text>
+                        <Text className="text-white font-bold text-xs" numberOfLines={1}>
+                            {currentTrack?.album && currentTrack.album !== 'Single' ? currentTrack.album : 'MELODIX PLAYER'}
+                        </Text>
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => setIsMenuVisible(true)}>
                         <MoreVertical size={28} color="#fff" />
                     </TouchableOpacity>
@@ -468,7 +489,9 @@ export default function PlayerScreen() {
                         </>
                     )}
 
-                    <View
+                    <TouchableOpacity
+                        activeOpacity={0.88}
+                        onPress={handleGoToAlbum}
                         style={{ width: width - 64, height: width - 64 }}
                         className="rounded-2xl overflow-hidden bg-zinc-900 shadow-2xl shadow-black/50 z-10"
                     >
@@ -486,7 +509,7 @@ export default function PlayerScreen() {
                                 />
                             </View>
                         )}
-                    </View>
+                    </TouchableOpacity>
                 </View>
 
                 <View className="mt-12">
@@ -506,6 +529,13 @@ export default function PlayerScreen() {
                                 )}
                             </View>
                             <Text className="text-gray-400 text-lg" numberOfLines={1}>{currentTrack.artist}</Text>
+                            {currentTrack.album && currentTrack.album !== 'Single' && (
+                                <TouchableOpacity onPress={handleGoToAlbum} activeOpacity={0.7} className="mt-1 flex-row items-center">
+                                    <Text className="text-emerald-500/90 text-xs font-semibold uppercase tracking-wider" numberOfLines={1}>
+                                        {currentTrack.album}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                         <View className="flex-row items-center">
                             <TouchableOpacity onPress={async () => {
@@ -640,7 +670,11 @@ export default function PlayerScreen() {
             <SongMenu
                 isVisible={isMenuVisible}
                 onClose={() => setIsMenuVisible(false)}
-                song={currentTrack as any}
+                song={currentTrack ? {
+                    ...currentTrack,
+                    album: (currentTrack as any).rawSongData?.album || { id: (currentTrack as any).albumId, name: currentTrack.album },
+                    artists: (currentTrack as any).rawSongData?.artists || { primary: [{ name: currentTrack.artist }] }
+                } : null}
                 userId={user?.id}
                 extraActions={
                     <>
