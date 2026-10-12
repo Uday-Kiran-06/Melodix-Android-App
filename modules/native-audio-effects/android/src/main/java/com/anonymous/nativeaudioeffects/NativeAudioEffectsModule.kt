@@ -9,32 +9,40 @@ import android.media.audiofx.AudioEffect
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
 import android.media.AudioManager
-import android.media.AudioPlaybackConfiguration
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class NativeAudioEffectsModule : Module() {
+  // Effect instances
   private var equalizer: Equalizer? = null
   private var bassBoost: BassBoost? = null
   private var loudnessEnhancer: LoudnessEnhancer? = null
-  
+  private var virtualizer: Virtualizer? = null
+
+  // Shared session state
   private var audioSessionId: Int = 0
+  private var lastSessionId: Int = -1
+
+  // Per-effect enabled flags
   private var isBassEnabled = false
   private var isEqEnabled = false
   private var isLoudnessEnabled = false
+  private var isVirtualizerEnabled = false
+
+  // Per-effect parameter state (applied on re-attach after session change)
   private var bassStrength = 0
   private var eqGains = mutableMapOf<Int, Int>()
   private var loudnessGain = 0
-
-  private var lastSessionId: Int = -1
+  private var virtualizerStrength = 600 // 0–1000; 600 ≈ moderate stereo widening
 
   private val sessionReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
       val action = intent?.action
       val sessionId = intent?.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, 0) ?: 0
       android.util.Log.d("AudioEffects", "Received broadcast: action=$action, sessionId=$sessionId")
-      
+
       if (action == AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION && sessionId != 0) {
         if (sessionId == lastSessionId) {
           android.util.Log.d("AudioEffects", "Session ID same as last ($sessionId), skipping")
@@ -42,10 +50,7 @@ class NativeAudioEffectsModule : Module() {
         }
         lastSessionId = sessionId
         audioSessionId = sessionId
-        android.util.Log.i("AudioEffects", "New session ID captured: $sessionId. Will attach effects lazily.")
-        // DON'T call reapplyEffects() here — let effects attach lazily when 
-        // the JS side calls setEnabled/setBassBoost/etc.
-        // This prevents disrupting ExoPlayer's audio pipeline.
+        android.util.Log.i("AudioEffects", "New session ID captured: $sessionId. Attaching effects gently.")
         attachEffectsGently()
       } else if (action == AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION) {
         android.util.Log.d("AudioEffects", "Session closed: $sessionId")
@@ -62,7 +67,6 @@ class NativeAudioEffectsModule : Module() {
     if (audioSessionId == 0) return
 
     try {
-      // Only create/recreate effects that are actually enabled
       if (isEqEnabled) {
         try {
           equalizer?.release()
@@ -100,6 +104,18 @@ class NativeAudioEffectsModule : Module() {
           android.util.Log.e("AudioEffects", "Failed to attach Loudness: ${e.message}")
         }
       }
+
+      if (isVirtualizerEnabled) {
+        try {
+          virtualizer?.release()
+          virtualizer = Virtualizer(0, audioSessionId).apply {
+            enabled = true
+            try { setStrength(virtualizerStrength.toShort()) } catch (e: Exception) {}
+          }
+        } catch (e: Exception) {
+          android.util.Log.e("AudioEffects", "Failed to attach Virtualizer: ${e.message}")
+        }
+      }
     } catch (e: Exception) {
       android.util.Log.e("AudioEffects", "Failed in attachEffectsGently: ${e.message}")
     }
@@ -109,9 +125,11 @@ class NativeAudioEffectsModule : Module() {
     equalizer?.release()
     bassBoost?.release()
     loudnessEnhancer?.release()
+    virtualizer?.release()
     equalizer = null
     bassBoost = null
     loudnessEnhancer = null
+    virtualizer = null
   }
 
   override fun definition() = ModuleDefinition {
@@ -157,6 +175,16 @@ class NativeAudioEffectsModule : Module() {
       } catch (e: Exception) {}
     }
 
+    Function("setVirtualizerStrength") { strength: Int ->
+      virtualizerStrength = strength
+      try {
+        if (virtualizer == null && audioSessionId != 0) virtualizer = Virtualizer(0, audioSessionId)
+        virtualizer?.setStrength(strength.toShort())
+      } catch (e: Exception) {
+        android.util.Log.e("AudioEffects", "Failed to set virtualizer strength: ${e.message}")
+      }
+    }
+
     Function("setEnabled") { type: String, enabled: Boolean ->
       try {
         when (type) {
@@ -167,7 +195,6 @@ class NativeAudioEffectsModule : Module() {
               bassBoost?.enabled = true
             } else {
               bassBoost?.enabled = false
-              // Release when disabled to free resources and avoid pipeline interference
               bassBoost?.release()
               bassBoost = null
             }
@@ -194,9 +221,21 @@ class NativeAudioEffectsModule : Module() {
               loudnessEnhancer = null
             }
           }
+          "virtualizer" -> {
+            isVirtualizerEnabled = enabled
+            if (enabled) {
+              if (virtualizer == null && audioSessionId != 0) virtualizer = Virtualizer(0, audioSessionId)
+              virtualizer?.enabled = true
+              try { virtualizer?.setStrength(virtualizerStrength.toShort()) } catch (e: Exception) {}
+            } else {
+              virtualizer?.enabled = false
+              virtualizer?.release()
+              virtualizer = null
+            }
+          }
         }
       } catch (e: Exception) {
-         android.util.Log.e("AudioEffects", "Error setting enabled for $type: ${e.message}")
+        android.util.Log.e("AudioEffects", "Error setting enabled for $type: ${e.message}")
       }
     }
 
@@ -214,7 +253,7 @@ class NativeAudioEffectsModule : Module() {
         val audioManager = appContext.reactContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         val configs = audioManager?.activePlaybackConfigurations
         val myUid = android.os.Process.myUid()
-        val ourConfig = configs?.find { 
+        val ourConfig = configs?.find {
           val isOurUid = try {
             val uidMethod = it.javaClass.getMethod("getClientUid")
             val uid = uidMethod.invoke(it) as? Int
@@ -222,33 +261,33 @@ class NativeAudioEffectsModule : Module() {
           } catch (e: Exception) {
             true
           }
-          isOurUid && it.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA 
+          isOurUid && it.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA
         }
-        
+
         val sessionId = ourConfig?.let {
-           try {
-             val method = it.javaClass.getMethod("getSessionId")
-             method.invoke(it) as? Int
-           } catch (e: Exception) { 
-             null 
-           }
+          try {
+            val method = it.javaClass.getMethod("getSessionId")
+            method.invoke(it) as? Int
+          } catch (e: Exception) {
+            null
+          }
         } ?: 0
 
         android.util.Log.d("AudioEffects", "Scan result: Found config? ${ourConfig != null}, sessionId? $sessionId")
 
         if (sessionId != 0) {
-           if (sessionId != lastSessionId) {
-             android.util.Log.i("AudioEffects", "Scanned and found NEW session ID: $sessionId")
-             lastSessionId = sessionId
-             audioSessionId = sessionId
-             attachEffectsGently()
-             true
-           } else {
-             android.util.Log.d("AudioEffects", "Scanned session ID $sessionId is same as last.")
-             true
-           }
+          if (sessionId != lastSessionId) {
+            android.util.Log.i("AudioEffects", "Scanned and found NEW session ID: $sessionId")
+            lastSessionId = sessionId
+            audioSessionId = sessionId
+            attachEffectsGently()
+            true
+          } else {
+            android.util.Log.d("AudioEffects", "Scanned session ID $sessionId is same as last.")
+            true
+          }
         } else {
-           false
+          false
         }
       } catch (e: Exception) {
         android.util.Log.e("AudioEffects", "Scan failed: ${e.message}")
@@ -268,6 +307,15 @@ class NativeAudioEffectsModule : Module() {
         result
       } catch (e: Exception) {
         listOf<Map<String, Any>>()
+      }
+    }
+
+    Function("isVirtualizerSupported") {
+      try {
+        val descriptors = AudioEffect.queryEffects()
+        descriptors?.any { it.type == AudioEffect.EFFECT_TYPE_VIRTUALIZER } ?: false
+      } catch (e: Exception) {
+        false
       }
     }
 

@@ -25,7 +25,7 @@ import { AuthProvider, useAuth } from '@/components/AuthContext';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRouter, useSegments } from 'expo-router';
-import { useColorScheme as useRNColorScheme, Alert } from 'react-native';
+import { useColorScheme as useRNColorScheme, Alert, AppState, AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -112,6 +112,17 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  // ── One-time migration: apply Spotify-like audio defaults for existing users ──
+  // Runs synchronously on first render. If the stored audioConfigVersion is
+  // behind the current constant, silently enable EQ + loudness normalization.
+  useEffect(() => {
+    const settings = useSettingsStore.getState();
+    if ((settings.audioConfigVersion ?? 0) < 1) {
+      console.log('[AudioConfig]: Applying Spotify-like audio defaults for existing user...');
+      settings.applySpotifyLikeDefaults();
+    }
+  }, []);
+
   useEffect(() => {
     const setup = async () => {
       if (isPlayerSettingUp || isPlayerInitialized) return;
@@ -185,6 +196,20 @@ export default function RootLayout() {
       }
     };
     setup();
+  }, []);
+
+  // Invalidate stale queries when the app comes back to the foreground (screen wake)
+  useEffect(() => {
+    let appState: AppStateStatus = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (appState.match(/inactive|background/) && nextAppState === 'active') {
+        // App just returned to foreground — silently revalidate stale data
+        console.log('[AppState]: App resumed to foreground, invalidating stale queries...');
+        queryClient.invalidateQueries();
+      }
+      appState = nextAppState;
+    });
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {

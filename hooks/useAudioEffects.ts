@@ -12,6 +12,8 @@ export const useAudioEffects = () => {
         isBassBoostEnabled,
         isEqEnabled,
         isLoudnessEnabled,
+        isVirtualizerEnabled,
+        virtualizerStrength,
         crossfadeEnabled,
         crossfadeDuration
     } = useSettingsStore();
@@ -21,18 +23,24 @@ export const useAudioEffects = () => {
     const isPlaying = playbackState.state === State.Playing;
     const isTransitioning = useRef(false);
 
-    // Scan for audio session ID when playback starts, but ONLY if any effect is enabled
-    const anyEffectEnabled = isBassBoostEnabled || isEqEnabled || isLoudnessEnabled;
-    
+    // Eagerly scan for audio session as soon as the hook mounts (covers already-playing
+    // sessions on app resume) and again when playback starts.
     useEffect(() => {
-        if (isPlaying && anyEffectEnabled) {
-            // Small delay to ensure the player has started and registered with the system
+        // Slight delay to let the native audio pipeline stabilise
+        const timer = setTimeout(() => {
+            AudioEffects.scanForSession();
+        }, 800);
+        return () => clearTimeout(timer);
+    }, []); // once on mount
+
+    useEffect(() => {
+        if (isPlaying) {
             const timer = setTimeout(() => {
                 AudioEffects.scanForSession();
-            }, 1000);
+            }, 800);
             return () => clearTimeout(timer);
         }
-    }, [isPlaying, anyEffectEnabled]);
+    }, [isPlaying]);
 
     // Audio Effect Sync (Existing)
     useEffect(() => {
@@ -69,6 +77,17 @@ export const useAudioEffects = () => {
             console.error('Failed to apply Loudness Enhancer:', e);
         }
     }, [isLoudnessEnabled, loudnessGain]);
+
+    useEffect(() => {
+        try {
+            AudioEffects.setEnabled('virtualizer', isVirtualizerEnabled);
+            if (isVirtualizerEnabled) {
+                AudioEffects.setVirtualizerStrength(virtualizerStrength);
+            }
+        } catch (e) {
+            console.error('Failed to apply Virtualizer:', e);
+        }
+    }, [isVirtualizerEnabled, virtualizerStrength]);
 
     const lastSkipTrackId = useRef<string | null>(null);
 

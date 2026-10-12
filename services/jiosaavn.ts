@@ -648,7 +648,7 @@ export const jioSaavnService = {
                 try {
                     const suggestionResponse = await fetchWithTimeout(`${baseUrl}/songs/${songId}/suggestions`);
                     if (suggestionResponse.ok) {
-                        const data = await suggestionResponse.json();
+                        const data = await safeParseJson(suggestionResponse);
                         if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
                             return data.data.map((s: Song) => ({
                                 ...s,
@@ -660,7 +660,7 @@ export const jioSaavnService = {
 
                     const recommendationResponse = await fetchWithTimeout(`${baseUrl}/songs/${songId}/recommendations`);
                     if (recommendationResponse.ok) {
-                        const data = await recommendationResponse.json();
+                        const data = await safeParseJson(recommendationResponse);
                         if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
                             return data.data.map((s: Song) => ({
                                 ...s,

@@ -1,9 +1,10 @@
 import GlassCard from '@/components/GlassCard';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import * as AudioEffects from '@/modules/native-audio-effects';
+import { EQ_PRESETS, EqPresetName, isVirtualizerSupported } from '@/modules/native-audio-effects';
 import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';
-import { Activity, ArrowLeft, RotateCcw, Volume2, Zap } from 'lucide-react-native';
+import { Activity, ArrowLeft, Radio, RotateCcw, Volume2, Zap } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
 
@@ -20,6 +21,9 @@ export default function AudioSettingsScreen() {
         setBassBoostStrength,
         eqGains,
         setEqGain,
+        setEqGains,
+        eqPreset,
+        setEqPreset,
         loudnessGain,
         setLoudnessGain,
         isBassBoostEnabled,
@@ -28,6 +32,10 @@ export default function AudioSettingsScreen() {
         setEqEnabled,
         isLoudnessEnabled,
         setLoudnessEnabled,
+        isVirtualizerEnabled,
+        setVirtualizerEnabled,
+        virtualizerStrength,
+        setVirtualizerStrength,
         crossfadeEnabled,
         setCrossfadeEnabled,
         crossfadeDuration,
@@ -39,19 +47,24 @@ export default function AudioSettingsScreen() {
 
     const isDark = theme === 'dark';
     const [bands, setBands] = useState<{ index: number, frequency: number }[]>([]);
+    const [virtualizerAvailable, setVirtualizerAvailable] = useState(true);
 
     useEffect(() => {
         const fetchBands = async () => {
             try {
                 const b = await AudioEffects.getEqualizerBands();
-                if (b && b.length > 0) {
-                    setBands(b);
-                }
+                if (b && b.length > 0) setBands(b);
             } catch (e) {
                 console.error('Failed to fetch EQ bands:', e);
             }
         };
         fetchBands();
+
+        try {
+            setVirtualizerAvailable(isVirtualizerSupported());
+        } catch (e) {
+            setVirtualizerAvailable(false);
+        }
     }, []);
 
     const handleReset = () => {
@@ -64,6 +77,22 @@ export default function AudioSettingsScreen() {
             ]
         );
     };
+
+    const applyPreset = (presetName: EqPresetName) => {
+        const preset = EQ_PRESETS[presetName];
+        setEqGains(preset.gains);
+        setEqPreset(presetName);
+        // Apply each band to native immediately
+        preset.gains.forEach((gain, index) => {
+            try { AudioEffects.setEqualizerBandGain(index, gain); } catch (e) {}
+        });
+    };
+
+    const PRESET_ROWS: EqPresetName[][] = [
+        ['flat', 'pop', 'rock', 'hiphop'],
+        ['jazz', 'classical', 'acoustic', 'electronic'],
+        ['bass_booster', 'treble_booster', 'vocal_booster', 'podcast'],
+    ];
 
     return (
         <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'} pt-12`}>
@@ -82,7 +111,7 @@ export default function AudioSettingsScreen() {
 
             <ScrollView className="px-5" showsVerticalScrollIndicator={false}>
 
-                {/* Audio Quality (Moved to top for visibility) */}
+                {/* Audio Quality */}
                 <View className="mb-10">
                     <View className="flex-row items-center mb-5 px-1">
                         <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
@@ -107,6 +136,98 @@ export default function AudioSettingsScreen() {
                                 ))}
                             </View>
                             <Text className="text-zinc-500 text-xs mt-4 px-1 text-center font-medium">Higher bitrates require a stable internet connection.</Text>
+                        </View>
+                    </GlassCard>
+                </View>
+
+                {/* EQ Presets */}
+                <View className="mb-10">
+                    <View className="flex-row justify-between items-center mb-5 px-1">
+                        <View className="flex-row items-center">
+                            <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
+                                <Activity size={18} color={ACCENT_COLOR} />
+                            </View>
+                            <View>
+                                <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Precision EQ</Text>
+                                {eqPreset !== 'flat' && (
+                                    <Text style={{ color: ACCENT_COLOR }} className="text-xs font-bold capitalize">{EQ_PRESETS[eqPreset].label} preset active</Text>
+                                )}
+                            </View>
+                        </View>
+                        <Switch
+                            value={isEqEnabled}
+                            onValueChange={setEqEnabled}
+                            trackColor={{ false: '#27272a', true: ACCENT_COLOR }}
+                            thumbColor="#fff"
+                        />
+                    </View>
+                    <GlassCard intensity={25} tint={isDark ? 'dark' : 'light'}>
+                        <View className="p-5">
+                            {/* Preset Chips */}
+                            <Text className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">Presets</Text>
+                            {PRESET_ROWS.map((row, rowIdx) => (
+                                <View key={rowIdx} className="flex-row mb-2">
+                                    {row.map((presetName) => {
+                                        const isActive = eqPreset === presetName;
+                                        return (
+                                            <TouchableOpacity
+                                                key={presetName}
+                                                onPress={() => {
+                                                    if (!isEqEnabled) setEqEnabled(true);
+                                                    applyPreset(presetName);
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    marginHorizontal: 3,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 10,
+                                                    alignItems: 'center',
+                                                    backgroundColor: isActive ? ACCENT_COLOR + '30' : (isDark ? '#27272a' : '#f1f5f9'),
+                                                    borderWidth: isActive ? 1.5 : 0,
+                                                    borderColor: isActive ? ACCENT_COLOR : 'transparent',
+                                                }}
+                                            >
+                                                <Text style={{
+                                                    color: isActive ? ACCENT_COLOR : (isDark ? '#a1a1aa' : '#64748b'),
+                                                    fontSize: 11,
+                                                    fontWeight: isActive ? '800' : '600',
+                                                }}>
+                                                    {EQ_PRESETS[presetName].label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            ))}
+
+                            {/* Manual Sliders */}
+                            <Text className="text-zinc-400 text-xs font-bold uppercase tracking-widest mt-5 mb-3">Manual Adjust</Text>
+                            <View className="flex-row justify-between h-56">
+                                {eqGains.map((gain, index) => (
+                                    <View key={index} className="items-center justify-between flex-1">
+                                        <View className="bg-zinc-800/50 px-1.5 py-0.5 rounded-sm">
+                                            <Text style={{ color: ACCENT_COLOR }} className="text-[10px] font-black">{gain > 0 ? `+${gain / 100}` : gain / 100}</Text>
+                                        </View>
+                                        <View style={{ height: 140, width: 40, alignItems: 'center', justifyContent: 'center' }}>
+                                            <Slider
+                                                style={{ width: 140, height: 40, transform: [{ rotate: '-90deg' }] }}
+                                                minimumValue={-1500}
+                                                maximumValue={1500}
+                                                step={100}
+                                                value={gain}
+                                                onValueChange={(val) => setEqGain(index, val)}
+                                                minimumTrackTintColor={ACCENT_COLOR}
+                                                maximumTrackTintColor={isDark ? "#27272a" : "#e2e8f0"}
+                                                thumbTintColor={ACCENT_COLOR}
+                                                disabled={!isEqEnabled}
+                                            />
+                                        </View>
+                                        <Text className="text-zinc-500 text-[10px] tracking-tighter mt-2 font-bold">
+                                            {bands[index] ? `${Math.round(bands[index].frequency / 1000)}Hz` : EQ_BAND_LABELS[index]}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </View>
                         </View>
                     </GlassCard>
                 </View>
@@ -149,60 +270,61 @@ export default function AudioSettingsScreen() {
                     </GlassCard>
                 </View>
 
-                {/* 5-Band Equalizer */}
-                <View className="mb-10">
-                    <View className="flex-row justify-between items-center mb-5 px-1">
-                        <View className="flex-row items-center">
-                            <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
-                                <Activity size={18} color={ACCENT_COLOR} />
-                            </View>
-                            <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Precision EQ</Text>
-                        </View>
-                        <Switch
-                            value={isEqEnabled}
-                            onValueChange={setEqEnabled}
-                            trackColor={{ false: '#27272a', true: ACCENT_COLOR }}
-                            thumbColor="#fff"
-                        />
-                    </View>
-                    <GlassCard intensity={25} tint={isDark ? 'dark' : 'light'}>
-                        <View className="p-5 flex-row justify-between h-56">
-                            {eqGains.map((gain, index) => (
-                                <View key={index} className="items-center justify-between flex-1">
-                                    <View className="bg-zinc-800/50 px-1.5 py-0.5 rounded-sm">
-                                        <Text style={{ color: ACCENT_COLOR }} className="text-[10px] font-black">{gain > 0 ? `+${gain / 100}` : gain / 100}</Text>
-                                    </View>
-                                    <View style={{ height: 140, width: 40, alignItems: 'center', justifyContent: 'center' }}>
-                                        <Slider
-                                            style={{ width: 140, height: 40, transform: [{ rotate: '-90deg' }] }}
-                                            minimumValue={-1500}
-                                            maximumValue={1500}
-                                            step={100}
-                                            value={gain}
-                                            onValueChange={(val) => setEqGain(index, val)}
-                                            minimumTrackTintColor={ACCENT_COLOR}
-                                            maximumTrackTintColor={isDark ? "#27272a" : "#e2e8f0"}
-                                            thumbTintColor={ACCENT_COLOR}
-                                            disabled={!isEqEnabled}
-                                        />
-                                    </View>
-                                    <Text className="text-zinc-500 text-[10px] tracking-tighter mt-2 font-bold">
-                                        {bands[index] ? `${Math.round(bands[index].frequency / 1000)}Hz` : EQ_BAND_LABELS[index]}
-                                    </Text>
+                {/* Virtualizer / Stereo Widening */}
+                {virtualizerAvailable && (
+                    <View className="mb-10">
+                        <View className="flex-row justify-between items-center mb-5 px-1">
+                            <View className="flex-row items-center">
+                                <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
+                                    <Radio size={18} color={ACCENT_COLOR} />
                                 </View>
-                            ))}
+                                <View>
+                                    <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Surround Sound</Text>
+                                    <Text className="text-zinc-500 text-xs">Stereo widening · spatial audio</Text>
+                                </View>
+                            </View>
+                            <Switch
+                                value={isVirtualizerEnabled}
+                                onValueChange={setVirtualizerEnabled}
+                                trackColor={{ false: '#27272a', true: ACCENT_COLOR }}
+                                thumbColor="#fff"
+                            />
                         </View>
-                    </GlassCard>
-                </View>
+                        <GlassCard intensity={25} tint={isDark ? 'dark' : 'light'}>
+                            <View className="p-5">
+                                <View className="flex-row justify-between mb-4">
+                                    <Text className="text-zinc-400 font-medium">Width</Text>
+                                    <Text style={{ color: ACCENT_COLOR }} className="font-black">{Math.round(virtualizerStrength / 10)}%</Text>
+                                </View>
+                                <Slider
+                                    style={{ width: '100%', height: 40 }}
+                                    minimumValue={0}
+                                    maximumValue={1000}
+                                    step={10}
+                                    value={virtualizerStrength}
+                                    onValueChange={setVirtualizerStrength}
+                                    minimumTrackTintColor={ACCENT_COLOR}
+                                    maximumTrackTintColor={isDark ? "#27272a" : "#e2e8f0"}
+                                    thumbTintColor={ACCENT_COLOR}
+                                    disabled={!isVirtualizerEnabled}
+                                />
+                                <Text className="text-zinc-500 text-xs mt-3 px-1 leading-4">Expands the stereo field for a wider, more immersive listening experience.</Text>
+                            </View>
+                        </GlassCard>
+                    </View>
+                )}
 
-                {/* Loudness Normalization */}
+                {/* Smart Loudness */}
                 <View className="mb-10">
                     <View className="flex-row justify-between items-center mb-5 px-1">
                         <View className="flex-row items-center">
                             <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
                                 <Volume2 size={18} color={ACCENT_COLOR} />
                             </View>
-                            <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Smart Loudness</Text>
+                            <View>
+                                <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Smart Loudness</Text>
+                                <Text className="text-zinc-500 text-xs">Volume normalization across tracks</Text>
+                            </View>
                         </View>
                         <Switch
                             value={isLoudnessEnabled}
@@ -273,13 +395,13 @@ export default function AudioSettingsScreen() {
                     </GlassCard>
                 </View>
 
-                {/* Premium Info Footer */}
+                {/* Footer */}
                 <View className="mt-4 mb-24 items-center">
                     <View className="bg-zinc-800/30 px-4 py-2 rounded-full flex-row items-center">
                         <View className="w-2 h-2 rounded-full bg-emerald-500 mr-2" />
-                        <Text className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest">Melodix Pro Audio Core v2.0</Text>
+                        <Text className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest">Melodix Pro Audio Core v3.0</Text>
                     </View>
-                    <Text className="text-zinc-600 text-[9px] mt-3 uppercase tracking-tighter">Professional Frequency Control Engine</Text>
+                    <Text className="text-zinc-600 text-[9px] mt-3 uppercase tracking-tighter">EQ · Bass · Virtualizer · Normalization · Crossfade</Text>
                 </View>
 
             </ScrollView>

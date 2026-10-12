@@ -738,9 +738,6 @@ export const usePlayerStore = create<PlayerState>()(
                         rawSongData: s
                     }));
 
-                    // Record newly received recommendation IDs into session deduplication
-                    cleanTracks.forEach(t => sessionRecommendedIds.add(t.id));
-
                     // Strictly filter out any recommendations that match currentTrack or tracks already in queue
                     const currentState = get();
                     const currentId = currentState.currentTrack?.id ? String(currentState.currentTrack.id) : null;
@@ -757,6 +754,11 @@ export const usePlayerStore = create<PlayerState>()(
                         if (tKey && (tKey === currentKey || existingQueueKeys.has(tKey))) return false;
                         return true;
                     });
+
+                    // Record only surviving recommendations into session deduplication.
+                    // Recording before filtering would permanently block songs that are valid
+                    // candidates but happened to be in the queue at this moment.
+                    nonDuplicateRecs.forEach(t => sessionRecommendedIds.add(t.id));
 
                     if (isManual) {
                         // Append uniquely to existing recommendations list
@@ -832,7 +834,10 @@ export const usePlayerStore = create<PlayerState>()(
                     console.log(`[Player]: Autoplaying top recommendation: ${nextTrack.title}`);
                     set({ recommendations: remainingRecs });
                     setPlaybackTransitionReason('AUTOPLAY_ADVANCE');
-                    await get().playTrack(nextTrack, [nextTrack, ...remainingRecs]);
+                    // Use rawSongData if available so playTrack resolves metadata correctly
+                    const nextSongData = (nextTrack as any).rawSongData ?? nextTrack;
+                    const remainingRaw = remainingRecs.map(t => (t as any).rawSongData ?? t);
+                    await get().playTrack(nextSongData, [nextSongData, ...remainingRaw]);
                     return;
                 }
 
@@ -876,7 +881,10 @@ export const usePlayerStore = create<PlayerState>()(
                             const remainingRecs = cleanTracks.slice(1);
                             set({ recommendations: remainingRecs });
                             setPlaybackTransitionReason('AUTOPLAY_ADVANCE');
-                            await get().playTrack(nextTrack, [nextTrack, ...remainingRecs]);
+                            // Pass raw Song data so playTrack resolves metadata correctly
+                            const nextSongData = candidates[0];
+                            const remainingRaw = candidates.slice(1);
+                            await get().playTrack(nextSongData, [nextSongData, ...remainingRaw]);
                             return;
                         }
                     } catch (fetchErr) {
