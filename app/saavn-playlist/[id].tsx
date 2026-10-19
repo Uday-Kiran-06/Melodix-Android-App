@@ -10,9 +10,10 @@ import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, CheckCircle2, MoreVertical, Play, Plus } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle2, Download, MoreVertical, Play, Plus } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { downloadService } from '@/services/DownloadService';
 
 const AnyFlashList = FlashList as any;
 
@@ -24,6 +25,8 @@ export default function SaavnPlaylistScreen() {
     const { audioQuality, theme } = useSettingsStore();
     const toggleLike = useLibraryStore(state => state.toggleLike);
     const likedSongs = useLibraryStore(state => state.likedSongs);
+    const downloadedSongs = useLibraryStore(state => state.downloadedSongs);
+    const activePlaylistDownloads = useLibraryStore(state => state.activePlaylistDownloads);
     const isDark = theme === 'dark';
 
     const [playlist, setPlaylist] = useState<any>(null);
@@ -105,6 +108,14 @@ export default function SaavnPlaylistScreen() {
     }
 
     const songs = playlist.songs || [];
+    const playlistId = String(id);
+    const playlistProgress = activePlaylistDownloads[playlistId];
+    const isDownloadingPlaylist = !!playlistProgress;
+    const allDownloaded = songs.length > 0 && songs.every((s: any) => downloadedSongs.some((ds: any) => String(ds.id) === String(s.id)));
+
+    const handleDownloadPlaylist = useCallback(() => {
+        downloadService.downloadPlaylist(songs, playlist?.name || "Playlist", playlistId);
+    }, [songs, playlist?.name, playlistId]);
 
     const renderHeader = () => (
         <View>
@@ -123,13 +134,44 @@ export default function SaavnPlaylistScreen() {
             <View className="items-center mb-6 px-4">
                  <MusicImage images={playlist.image} className="w-48 h-48 rounded-2xl mb-4 shadow-lg" />
                  {songs.length > 0 && (
-                     <TouchableOpacity 
-                         onPress={handlePlayAll}
-                         className="bg-emerald-500 w-full py-3 rounded-full flex-row justify-center items-center mt-2"
-                     >
-                         <Play fill="#000" color="#000" size={20} />
-                         <Text className="text-black font-bold text-lg ml-2">Play All</Text>
-                     </TouchableOpacity>
+                     <View className="flex-row gap-3 w-full mt-2">
+                         <TouchableOpacity 
+                             onPress={handlePlayAll}
+                             className="flex-1 bg-emerald-500 py-3.5 rounded-full flex-row justify-center items-center shadow-lg shadow-emerald-500/20"
+                         >
+                             <Play fill="#000" color="#000" size={20} />
+                             <Text className="text-black font-bold text-base ml-2">Play All</Text>
+                         </TouchableOpacity>
+
+                         <TouchableOpacity 
+                             onPress={handleDownloadPlaylist}
+                             disabled={isDownloadingPlaylist || allDownloaded}
+                             className={`flex-1 py-3.5 rounded-full flex-row justify-center items-center ${
+                                 allDownloaded 
+                                     ? 'bg-emerald-500/15 border border-emerald-500/30' 
+                                     : isDownloadingPlaylist
+                                     ? 'bg-zinc-800 border border-emerald-500/50'
+                                     : isDark ? 'bg-zinc-800' : 'bg-slate-200'
+                             }`}
+                         >
+                             {isDownloadingPlaylist ? (
+                                 <ActivityIndicator size="small" color="#10b981" />
+                             ) : allDownloaded ? (
+                                 <CheckCircle2 size={20} color="#10b981" />
+                             ) : (
+                                 <Download size={20} color={isDark ? "#fff" : "#1e293b"} />
+                             )}
+                             <Text className={`font-bold text-base ml-2 ${
+                                 allDownloaded ? 'text-emerald-400' : isDark ? 'text-white' : 'text-slate-900'
+                             }`}>
+                                 {isDownloadingPlaylist 
+                                     ? `${playlistProgress?.current || 0}/${playlistProgress?.total || songs.length}` 
+                                     : allDownloaded 
+                                     ? 'Downloaded' 
+                                     : 'Download'}
+                             </Text>
+                         </TouchableOpacity>
+                     </View>
                  )}
             </View>
         </View>

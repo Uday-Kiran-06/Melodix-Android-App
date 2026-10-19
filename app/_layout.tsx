@@ -133,7 +133,11 @@ export default function RootLayout() {
           waitForBuffer: true,
         });
         await TrackPlayer.updateOptions({
+          icon: require('../assets/images/notification-icon.png'),
           progressUpdateEventInterval: 1,
+          // color: iQOO/Vivo OriginOS reads the notification accent color to decide
+          // whether to show the floating media pill. Without it the pill is skipped.
+          color: 0xff10b981, // Melodix green (#10b981) as ARGB integer
           android: {
             appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
             alwaysPauseOnInterruption: false,

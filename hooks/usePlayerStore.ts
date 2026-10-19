@@ -15,7 +15,7 @@ import { jioSaavnService } from "../services/jiosaavn";
 import { LrcLine, lyricsService } from "../services/lyrics";
 import { queueController } from "../services/QueueController";
 import { recommendationEngine } from "../services/RecommendationEngine";
-import { sanitizeImageUrl, normalizeTrackTitle, normalizeArtistName } from "../utils/stringUtils";
+import { sanitizeImageUrl, sanitizeNotificationArtworkUrl, normalizeTrackTitle, normalizeArtistName } from "../utils/stringUtils";
 import { useSettingsStore } from "./useSettingsStore";
 
 interface PlayerState {
@@ -229,8 +229,10 @@ export const usePlayerStore = create<PlayerState>()(
                     url: trackUrl,
                     title: cleanMetadata(trackData.name || trackData.title, "Unknown Track"),
                     artist: cleanMetadata(trackData.artists?.primary?.[0]?.name || trackData.artist, "Unknown Artist"),
+                    // Use 150x150 for notification artwork — OEM pills (iQOO, Realme) load
+                    // this synchronously and skip the pill if the image is too slow to fetch.
                     artwork: cleanMetadata(
-                        sanitizeImageUrl(trackData.image || trackData.artwork),
+                        sanitizeNotificationArtworkUrl(trackData.image || trackData.artwork),
                         undefined
                     ),
                     album: cleanMetadata(trackData.album?.name || trackData.album, "Single"),
@@ -289,7 +291,7 @@ export const usePlayerStore = create<PlayerState>()(
                         title: cleanMetadata(item.name || item.title, "Unknown Track"),
                         artist: cleanMetadata(item.artists?.primary?.[0]?.name || item.artist, "Unknown Artist"),
                         artwork: cleanMetadata(
-                            sanitizeImageUrl(item.image || item.artwork),
+                            sanitizeNotificationArtworkUrl(item.image || item.artwork),
                             undefined
                         ),
                         album: cleanMetadata(item.album?.name || item.album, "Single"),
@@ -722,7 +724,7 @@ export const usePlayerStore = create<PlayerState>()(
                         url: getTrackUrl(s, selectedQuality),
                         title: cleanMetadata(s.name, "Unknown Track"),
                         artist: cleanMetadata(s.artists?.primary?.[0]?.name, "Unknown Artist"),
-                        artwork: cleanMetadata(sanitizeImageUrl(s.image), undefined),
+                        artwork: cleanMetadata(sanitizeNotificationArtworkUrl(s.image), undefined),
                         album: cleanMetadata(s.album?.name, "Single"),
                         description: cleanMetadata(s.name, "Unknown Track"),
                         genre: cleanMetadata(s.language, "Music"),
@@ -920,7 +922,7 @@ export const usePlayerStore = create<PlayerState>()(
                         url: trackUrl,
                         title: cleanMetadata(songData.name, "Unknown Track"),
                         artist: cleanMetadata(songData.artists?.primary?.[0]?.name, "Unknown Artist"),
-                        artwork: cleanMetadata(sanitizeImageUrl(songData.image), undefined),
+                        artwork: cleanMetadata(sanitizeNotificationArtworkUrl(songData.image), undefined),
                         album: cleanMetadata(songData.album?.name, "Single"),
                         description: cleanMetadata(songData.name, "Unknown Track"),
                         genre: cleanMetadata(songData.language, "Music"),

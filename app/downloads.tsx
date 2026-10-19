@@ -6,7 +6,6 @@ import SongMenu from '@/components/SongMenu';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { Song } from '@/types/music';
 import { FlashList } from '@shopify/flash-list';
-import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
 import { ChevronLeft, Download, MoreVertical, Play, Shuffle, Trash2, X } from 'lucide-react-native';

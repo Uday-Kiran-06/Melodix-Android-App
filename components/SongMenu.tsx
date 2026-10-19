@@ -1,13 +1,14 @@
 import { MotiView } from 'moti';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { useLibraryStore } from '@/hooks/useLibraryStore';
-import { Heart, ListPlus, X, User, Disc, Share2 } from 'lucide-react-native';
+import { Heart, ListPlus, X, User, Disc, Share2, Download, CheckCircle2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View, Dimensions } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View, Dimensions, Alert } from 'react-native';
+import { downloadService } from '@/services/DownloadService';
 
 const { height } = Dimensions.get('window');
 
@@ -56,7 +57,7 @@ interface SongMenuComponent extends React.FC<SongMenuProps> {
 }
 
 const SongMenu: SongMenuComponent = ({ isVisible, onClose, song, userId, extraActions }: SongMenuProps) => {
-    const { toggleLike, isLiked } = useLibraryStore();
+    const { toggleLike, isLiked, downloadedSongs, activeDownloads } = useLibraryStore();
     const router = useRouter();
 
     if (!song) return null;
@@ -70,6 +71,22 @@ const SongMenu: SongMenuComponent = ({ isVisible, onClose, song, userId, extraAc
     const songTitle = song.name || song.title || "Unknown Track";
     const songArtist = song.artists?.primary?.[0]?.name || song.artist || "Unknown Artist";
     const songImage = jioSaavnService.sanitizeImageUrl(song.image || song.artwork);
+
+    const songId = song.id ? String(song.id) : '';
+    const isDownloaded = downloadedSongs.some((s: any) => String(s.id) === songId);
+    const isDownloading = songId ? activeDownloads[songId] !== undefined : false;
+    const downloadProgress = (songId && activeDownloads[songId] !== undefined) ? activeDownloads[songId] : 0;
+
+    const handleDownload = async () => {
+        if (isDownloading) return;
+        if (isDownloaded) {
+            Alert.alert("Already Downloaded", `"${songTitle}" is already saved to your device.`);
+            return;
+        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onClose();
+        downloadService.downloadSong(song);
+    };
 
     return (
         <Modal
@@ -119,7 +136,23 @@ const SongMenu: SongMenuComponent = ({ isVisible, onClose, song, userId, extraAc
                             color={liked ? "#1db954" : "#fff"}
                         />
 
-                        {/* Inject Extra Actions (e.g., Download, Sleep Timer) */}
+                        {/* Download Song Action */}
+                        <MenuItem
+                            icon={isDownloaded ? CheckCircle2 : Download}
+                            label={
+                                isDownloading
+                                    ? `Downloading... ${Math.round(downloadProgress * 100)}%`
+                                    : isDownloaded
+                                    ? "Downloaded"
+                                    : "Download song"
+                            }
+                            onPress={handleDownload}
+                            color={isDownloaded ? "#1db954" : isDownloading ? "#10b981" : "#fff"}
+                            showProgress={isDownloading}
+                            progress={downloadProgress}
+                        />
+
+                        {/* Inject Extra Actions (e.g., Sleep Timer) */}
                         {extraActions}
 
                         <MenuItem

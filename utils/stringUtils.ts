@@ -48,6 +48,38 @@ export const sanitizeImageUrl = (images: any): string | null => {
 };
 
 /**
+ * Returns a lightweight (150x150) image URL suitable for system notifications
+ * and OEM floating media pills (iQOO OriginOS, Realme Dynamic Island, etc.).
+ *
+ * These OEM UIs load artwork synchronously before rendering the pill — a 500x500
+ * image is too slow to fetch cold, causing the pill to be silently skipped.
+ * Using 150x150 ensures the image is ready before the pill timeout fires.
+ */
+export const sanitizeNotificationArtworkUrl = (images: any): string | null => {
+  if (!images) return null;
+
+  let url = '';
+  if (Array.isArray(images)) {
+    const last = images[images.length - 1];
+    url = last?.link || last?.url || (typeof last === 'string' ? last : '');
+  } else if (typeof images === 'string') {
+    url = images;
+  } else if (typeof images === 'object') {
+    url = images.link || images.url || '';
+  }
+
+  if (!url || typeof url !== 'string') return null;
+
+  let sanitized = url.trim().replace('http:', 'https:');
+
+  // Normalise to 150x150 — fast enough for OEM pill to load synchronously
+  sanitized = sanitized.replace('500x500', '150x150').replace('50x50', '150x150');
+
+  return sanitized;
+};
+
+
+/**
  * Normalizes a song or track title for robust deduplication.
  * Strips HTML entities, brackets, movie tags (From ...), lyrical/video/remix indicators,
  * and punctuation, returning a canonical lowercase string.

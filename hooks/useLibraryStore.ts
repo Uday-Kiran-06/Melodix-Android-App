@@ -50,11 +50,13 @@ interface LibState {
     deletePlaylist: (playlistId: string) => Promise<void>;
     downloadedSongs: Song[];
     activeDownloads: Record<string, number>;
+    activePlaylistDownloads: Record<string, { current: number; total: number }>;
     setDownloadedSongs: (songs: Song[]) => void;
     syncDownloadedSongs: () => Promise<void>;
     saveDownload: (song: Song, localUri: string) => Promise<void>;
     deleteDownload: (songId: string) => Promise<void>;
     updateDownloadProgress: (songId: string, progress: number) => void;
+    updatePlaylistProgress: (playlistId: string, progress: { current: number; total: number } | null) => void;
 }
 
 export const useLibraryStore = create<LibState>()(
@@ -64,6 +66,7 @@ export const useLibraryStore = create<LibState>()(
             playlists: [],
             downloadedSongs: [],
             activeDownloads: {},
+            activePlaylistDownloads: {},
 
             setDownloadedSongs: (songs: Song[]) => set({ downloadedSongs: songs }),
 
@@ -83,6 +86,18 @@ export const useLibraryStore = create<LibState>()(
                         });
                     }, 2000);
                 }
+            },
+
+            updatePlaylistProgress: (playlistId: string, progress: { current: number; total: number } | null) => {
+                set((state: LibState) => {
+                    const newPlaylistDownloads = { ...state.activePlaylistDownloads };
+                    if (!progress) {
+                        delete newPlaylistDownloads[playlistId];
+                    } else {
+                        newPlaylistDownloads[playlistId] = progress;
+                    }
+                    return { activePlaylistDownloads: newPlaylistDownloads };
+                });
             },
 
             saveDownload: async (song: any, localUri: string) => {
@@ -123,18 +138,23 @@ export const useLibraryStore = create<LibState>()(
                                 await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
                             }
 
-                            // Create a temporary copy in cacheDirectory for MediaLibrary to ingest
-                            const tempCacheUri = `${FileSystem.cacheDirectory}${normalizedSong.name.replace(/\s+/g, '_')}_${normalizedSong.id}.mp3`;
+                            const cleanTitle = (normalizedSong.name || 'song')
+                                .replace(/[\\/:*?"<>|]/g, '_')
+                                .replace(/\s+/g, '_')
+                                .trim();
+                            const ext = localUri.endsWith('.m4a') ? '.m4a' : '.mp3';
+                            const tempCacheUri = `${FileSystem.cacheDirectory}${cleanTitle}_${normalizedSong.id}${ext}`;
                             await FileSystem.copyAsync({ from: localUri, to: tempCacheUri });
                             
                             const asset = await MediaLibrary.createAssetAsync(tempCacheUri);
                             const albumName = 'Melodix'; 
                             let album = await MediaLibrary.getAlbumAsync(albumName);
                             
+                            // Note: copyAsset must be false so the asset is moved into the Melodix album without creating a duplicate file in storage
                             if (album === null) {
-                                await MediaLibrary.createAlbumAsync(albumName, asset, true);
+                                await MediaLibrary.createAlbumAsync(albumName, asset, false);
                             } else {
-                                await MediaLibrary.addAssetsToAlbumAsync([asset], album, true);
+                                await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
                             }
                             
                             await FileSystem.deleteAsync(tempCacheUri, { idempotent: true });
@@ -254,18 +274,36 @@ export const useLibraryStore = create<LibState>()(
                             const { assets } = await MediaLibrary.getAssetsAsync({ album, mediaType: 'audio' });
                             
                             for (const asset of assets) {
-                                // Extract potential ID from filename (format: Title_ID.mp3)
-                                const filename = asset.filename;
-                                const match = filename.match(/(.+)_([a-zA-Z0-9_\-]{4,})\.mp3$/i);
-                                let extractedId = match ? match[2] : null;
-                                let extractedTitle = match ? match[1].replace(/_/g, ' ') : filename.replace('.mp3', '').replace(/_/g, ' ');
+                                const filename = asset.filename || '';
+                                
+                                // Extract potential ID from filename format: <Title>_<ID>.<ext>
+                                const lastUnderscore = filename.lastIndexOf('_');
+                                const lastDot = filename.lastIndexOf('.');
+                                let extractedId: string | null = null;
+                                if (lastUnderscore !== -1 && lastDot > lastUnderscore) {
+                                    extractedId = filename.substring(lastUnderscore + 1, lastDot);
+                                }
+                                
+                                let extractedTitle = (lastUnderscore !== -1 ? filename.substring(0, lastUnderscore) : filename.replace(/\.[^/.]+$/, ''))
+                                    .replace(/_/g, ' ')
+                                    .trim();
 
-                                // 1. Check if ID exists in DB
-                                const dbMatch = extractedId ? dbSongs.find(s => s.id === extractedId) : dbSongs.find(s => s.name === extractedTitle || s.id === asset.id);
+                                // Check if already present in dbSongs (either by ID, filename containing song ID, or asset uri)
+                                const dbMatch = dbSongs.find(s => {
+                                    if (s.id && extractedId && String(s.id) === String(extractedId)) return true;
+                                    if (s.id && filename.includes(`_${s.id}.`)) return true;
+                                    if (s.id && String(s.id) === String(asset.id)) return true;
+                                    if (s.localUri && s.localUri === asset.uri) return true;
+                                    
+                                    // Normalized title comparison as fallback
+                                    const normDbName = (s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    const normExtracted = extractedTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    return normDbName.length > 3 && normDbName === normExtracted;
+                                });
 
                                 if (dbMatch) {
-                                    // Update existing entry with newer local URI if it matches ID but URI is different
-                                    if (dbMatch.localUri !== asset.uri) {
+                                    // Song already tracked in DB, don't create a duplicate entry
+                                    if (!dbMatch.localUri) {
                                         dbMatch.localUri = asset.uri;
                                     }
                                     continue;
@@ -274,7 +312,7 @@ export const useLibraryStore = create<LibState>()(
                                 // 2. Add as new local asset if not found
                                 dbSongs.push({
                                     id: extractedId || asset.id,
-                                    name: extractedTitle,
+                                    name: extractedTitle || "Unknown Track",
                                     duration: asset.duration,
                                     image: null,
                                     artists: { primary: [{ name: "Local File" }], featured: [], all: [] },
@@ -285,7 +323,22 @@ export const useLibraryStore = create<LibState>()(
                         }
                     }
 
-                    set({ downloadedSongs: dbSongs });
+                    // 3. Final deduplication pass by id and localUri
+                    const uniqueSongs: Song[] = [];
+                    const seenIds = new Set<string>();
+                    const seenUris = new Set<string>();
+
+                    for (const song of dbSongs) {
+                        const songId = song.id ? String(song.id) : null;
+                        const uri = song.localUri || null;
+                        if (songId && seenIds.has(songId)) continue;
+                        if (uri && seenUris.has(uri)) continue;
+                        if (songId) seenIds.add(songId);
+                        if (uri) seenUris.add(uri);
+                        uniqueSongs.push(song);
+                    }
+
+                    set({ downloadedSongs: uniqueSongs });
                 } catch (error) {
                     console.error("Sync downloads error:", error);
                 }

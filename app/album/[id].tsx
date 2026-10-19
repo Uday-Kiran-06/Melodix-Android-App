@@ -10,9 +10,10 @@ import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, CheckCircle2, MoreVertical, Play, Plus } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle2, Download, MoreVertical, Play, Plus } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { downloadService } from '@/services/DownloadService';
 
 const AnyFlashList = FlashList as any;
 
@@ -24,6 +25,8 @@ export default function AlbumScreen() {
     const { audioQuality, theme } = useSettingsStore();
     const toggleLike = useLibraryStore(state => state.toggleLike);
     const likedSongs = useLibraryStore(state => state.likedSongs);
+    const downloadedSongs = useLibraryStore(state => state.downloadedSongs);
+    const activePlaylistDownloads = useLibraryStore(state => state.activePlaylistDownloads);
     const isDark = theme === 'dark';
 
     const [album, setAlbum] = useState<any>(null);
@@ -107,6 +110,15 @@ export default function AlbumScreen() {
     const songs = album.songs || [];
     const primaryArtist = album.artists?.primary?.[0]?.name;
 
+    const albumId = String(id);
+    const albumProgress = activePlaylistDownloads[albumId];
+    const isDownloadingAlbum = !!albumProgress;
+    const allDownloaded = songs.length > 0 && songs.every((s: any) => downloadedSongs.some((ds: any) => String(ds.id) === String(s.id)));
+
+    const handleDownloadAlbum = useCallback(() => {
+        downloadService.downloadPlaylist(songs, album?.name || "Album", albumId);
+    }, [songs, album?.name, albumId]);
+
     const renderHeader = () => (
         <View>
             <View className="px-4 flex-row items-center justify-between mb-6 pt-4">
@@ -127,13 +139,44 @@ export default function AlbumScreen() {
                      <Text className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-800'}`}>by {primaryArtist}</Text>
                  )}
                  {songs.length > 0 && (
-                     <TouchableOpacity 
-                         onPress={handlePlayAll}
-                         className="bg-emerald-500 w-full py-3 rounded-full flex-row justify-center items-center mt-2"
-                     >
-                         <Play fill="#000" color="#000" size={20} />
-                         <Text className="text-black font-bold text-lg ml-2">Play All</Text>
-                     </TouchableOpacity>
+                     <View className="flex-row gap-3 w-full mt-2">
+                         <TouchableOpacity 
+                             onPress={handlePlayAll}
+                             className="flex-1 bg-emerald-500 py-3.5 rounded-full flex-row justify-center items-center shadow-lg shadow-emerald-500/20"
+                         >
+                             <Play fill="#000" color="#000" size={20} />
+                             <Text className="text-black font-bold text-base ml-2">Play All</Text>
+                         </TouchableOpacity>
+
+                         <TouchableOpacity 
+                             onPress={handleDownloadAlbum}
+                             disabled={isDownloadingAlbum || allDownloaded}
+                             className={`flex-1 py-3.5 rounded-full flex-row justify-center items-center ${
+                                 allDownloaded 
+                                     ? 'bg-emerald-500/15 border border-emerald-500/30' 
+                                     : isDownloadingAlbum
+                                     ? 'bg-zinc-800 border border-emerald-500/50'
+                                     : isDark ? 'bg-zinc-800' : 'bg-slate-200'
+                             }`}
+                         >
+                             {isDownloadingAlbum ? (
+                                 <ActivityIndicator size="small" color="#10b981" />
+                             ) : allDownloaded ? (
+                                 <CheckCircle2 size={20} color="#10b981" />
+                             ) : (
+                                 <Download size={20} color={isDark ? "#fff" : "#1e293b"} />
+                             )}
+                             <Text className={`font-bold text-base ml-2 ${
+                                 allDownloaded ? 'text-emerald-400' : isDark ? 'text-white' : 'text-slate-900'
+                             }`}>
+                                 {isDownloadingAlbum 
+                                     ? `${albumProgress?.current || 0}/${albumProgress?.total || songs.length}` 
+                                     : allDownloaded 
+                                     ? 'Downloaded' 
+                                     : 'Download'}
+                             </Text>
+                         </TouchableOpacity>
+                     </View>
                  )}
             </View>
         </View>

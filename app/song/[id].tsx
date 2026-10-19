@@ -60,6 +60,7 @@ export default function SongDetailsScreen() {
 
     const handleDownload = async () => {
         if (!song || !song.downloadUrl) return;
+        if (downloadProgress !== null) return;
 
         const { downloadedSongs, syncDownloadedSongs } = useLibraryStore.getState();
         const downloadedTrack = downloadedSongs.find(s => s.id === song.id);
@@ -99,7 +100,7 @@ export default function SongDetailsScreen() {
             }
 
             const cleanTitle = song.name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_').trim();
-            const filename = `${cleanTitle}_${song.id}.m4a`;
+            const filename = `${cleanTitle}_${song.id}.mp3`;
             const fileUri = `${downloadDir}${filename}`;
 
             const notificationId = `download-${song.id}`;

@@ -127,6 +127,7 @@ export default function PlayerScreen() {
 
     const handleDownload = async () => {
         if (!currentTrack || !currentTrack.url) return;
+        if (downloadProgress !== null) return;
 
         const { downloadedSongs, syncDownloadedSongs } = useLibraryStore.getState();
         const downloadedTrack = downloadedSongs.find(s => s.id === currentTrack.id);
@@ -641,7 +642,10 @@ export default function PlayerScreen() {
                     <TouchableOpacity onPress={() => setIsPlaylistModalVisible(true)}>
                         <Plus size={24} color="#fff" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleDownload}>
+                    <TouchableOpacity 
+                        onPress={handleDownload}
+                        disabled={downloadProgress !== null}
+                    >
                         <Download size={24} color={downloadProgress !== null ? DesignSystem.colors.primary : "#fff"} />
                     </TouchableOpacity>
                     <TouchableOpacity 
@@ -678,13 +682,6 @@ export default function PlayerScreen() {
                 userId={user?.id}
                 extraActions={
                     <>
-                        <SongMenu.Item
-                            icon={Download}
-                            label={downloadProgress !== null ? `Downloading... ${Math.round(downloadProgress * 100)}%` : "Download song"}
-                            onPress={handleDownload}
-                            showProgress={downloadProgress !== null}
-                            progress={downloadProgress || 0}
-                        />
                         <SongMenu.Item
                             icon={Clock}
                             label={sleepTimer ? `Sleep Timer: ${formatTime(remainingTime || 0)}` : "Sleep Timer"}
