@@ -19,8 +19,9 @@ android {
         // This version's store changelog, shown as What's new when a release
         // goes out before the app's own notes for it are written.
         val changelog = rootProject.file("fastlane/metadata/android/en-US/changelogs/$versionCode.txt")
-            .takeIf { it.exists() }?.readText().orEmpty().trim()
-        buildConfigField("String", "CHANGELOG", "\"" + changelog.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"")
+            .takeIf { it.exists() }?.readText().orEmpty().replace("\r", "").trim()
+        val escapedChangelog = changelog.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+        buildConfigField("String", "CHANGELOG", "\"$escapedChangelog\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -61,10 +62,16 @@ android {
     // that runs anywhere.
     splits {
         abi {
-            isEnable = !providers.gradleProperty("universalOnly").map { it.toBoolean() }.getOrElse(false)
-            reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
+            val universalOnly = providers.gradleProperty("universalOnly").map { it.toBoolean() }.getOrElse(false)
+            if (universalOnly) {
+                isEnable = false
+                isUniversalApk = false
+            } else {
+                isEnable = true
+                reset()
+                include("arm64-v8a", "armeabi-v7a", "x86_64")
+                isUniversalApk = true
+            }
         }
     }
     // No encrypted dependency report in the APK: only Google can read it, and

@@ -63,7 +63,7 @@ internal class UpdateInstall(private val context: android.content.Context, priva
     fun start(onHandedOver: () -> Unit = {}) {
         if (!Updater.canInstall(context)) {
             runCatching { context.startActivity(Updater.allowInstallsIntent(context)) }
-            error = "Allow OpenTune to install apps, then tap Update again."
+            error = "Allow Melodix to install apps, then tap Update again."
             return
         }
         error = null

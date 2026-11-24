@@ -28,16 +28,16 @@ import okhttp3.Request
 object Updater {
     private const val TAG = "Updater"
 
-    /** Whether Android lets OpenTune install apps; if not, [allowInstallsIntent] opens the switch. */
+    /** Whether Android lets Melodix install apps; if not, [allowInstallsIntent] opens the switch. */
     fun canInstall(context: Context) = context.packageManager.canRequestPackageInstalls()
 
     fun allowInstallsIntent(context: Context) =
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri())
 
     private fun dir(context: Context) = File(context.cacheDir, "updates")
-    private val VERSION_IN_NAME = Regex("""^OpenTune-v([0-9][0-9.]*)-[A-Za-z0-9_\-]+\.apk$""")
+    private val VERSION_IN_NAME = Regex("""^(?:Melodix|OpenTune|app)[-_.]v?([0-9][0-9.]*).*?\.apk$""", RegexOption.IGNORE_CASE)
 
-    /** The version an update APK's file name carries, like 0.5.0 in OpenTune-v0.5.0-arm64-v8a.apk. */
+    /** The version an update APK's file name carries, like 1.0.0 in Melodix-v1.0.0-arm64-v8a.apk. */
     internal fun versionOf(fileName: String): String? = VERSION_IN_NAME.find(fileName)?.groupValues?.get(1)
 
     /** Update APKs kept from earlier downloads, in bytes. */

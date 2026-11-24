@@ -60,14 +60,14 @@ class UpdateCheckTest {
     }
 
     @Test fun readsTheLatestReleaseFromWhereTheReleasesPageLeads() {
-        val r = UpdateCheck.fromPage("https://github.com/justshivv/Opentune/releases/tag/v0.3.3", listOf("arm64-v8a", "armeabi-v7a"))!!
+        val r = UpdateCheck.fromPage("https://github.com/Uday-Kiran-06/Melodix-Android-App/releases/tag/v0.3.3", listOf("arm64-v8a", "armeabi-v7a"))!!
         assertEquals("0.3.3", r.version)
-        assertEquals("OpenTune-v0.3.3-arm64-v8a.apk", r.apk?.name)
-        assertEquals("https://github.com/justshivv/Opentune/releases/download/v0.3.3/OpenTune-v0.3.3-arm64-v8a.apk", r.apk?.url)
-        assertEquals("https://github.com/justshivv/Opentune/releases/download/v0.3.3/SHA256SUMS.txt", r.sums?.url)
+        assertEquals("Melodix-v0.3.3-arm64-v8a.apk", r.apk?.name)
+        assertEquals("https://github.com/Uday-Kiran-06/Melodix-Android-App/releases/download/v0.3.3/Melodix-v0.3.3-arm64-v8a.apk", r.apk?.url)
+        assertEquals("https://github.com/Uday-Kiran-06/Melodix-Android-App/releases/download/v0.3.3/SHA256SUMS.txt", r.sums?.url)
         // A processor releases have no APK of their own for gets the universal one.
-        assertEquals("OpenTune-v0.3.3-universal.apk", UpdateCheck.fromPage("https://github.com/justshivv/Opentune/releases/tag/v0.3.3", listOf("riscv64"))!!.apk?.name)
+        assertEquals("Melodix-v0.3.3-universal.apk", UpdateCheck.fromPage("https://github.com/Uday-Kiran-06/Melodix-Android-App/releases/tag/v0.3.3", listOf("riscv64"))!!.apk?.name)
         // No release yet: the page stays on the release list.
-        assertNull(UpdateCheck.fromPage("https://github.com/justshivv/Opentune/releases", listOf("arm64-v8a")))
+        assertNull(UpdateCheck.fromPage("https://github.com/Uday-Kiran-06/Melodix-Android-App/releases", listOf("arm64-v8a")))
     }
 }
