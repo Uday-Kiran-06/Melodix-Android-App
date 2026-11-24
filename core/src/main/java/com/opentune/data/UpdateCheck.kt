@@ -272,7 +272,7 @@ object UpdateCheck {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(com.opentune.core.R.drawable.ic_stat_opentune)
+            .setSmallIcon(com.opentune.core.R.drawable.ic_stat_melodix)
             .setContentTitle(com.opentune.i18n.Tr.f("Melodix {0} is out", release.version))
             .setContentText(com.opentune.i18n.Tr.f("Tap to update from {0}", BuildConfig.VERSION_NAME))
             .setContentIntent(open)

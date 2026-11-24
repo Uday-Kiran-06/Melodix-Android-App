@@ -71,12 +71,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +93,6 @@ import com.opentune.data.recognize.Recognizer
 import com.opentune.ui.components.Artwork
 import com.opentune.ui.components.Haptics
 import com.opentune.ui.components.MARK_VIEWPORT
-import com.opentune.ui.components.markPath
 import com.opentune.ui.components.rememberHaptics
 import com.opentune.ui.theme.songAccents
 import kotlin.math.PI
@@ -304,7 +305,7 @@ private fun FoundCard(song: Recognized, finding: Boolean, onPlay: () -> Unit, on
  */
 @Composable
 private fun ListenOrb(listening: Boolean, level: () -> Float, modifier: Modifier, onClick: () -> Unit) {
-    val mark = remember { markPath() }
+    val logo = ImageBitmap.imageResource(com.opentune.R.drawable.melodix_icon)
     val (a, b) = songAccents()
     val clock = rememberInfiniteTransition(label = "orb")
     val t by clock.animateFloat(0f, 1f, infiniteRepeatable(tween(12_000, easing = LinearEasing), RepeatMode.Restart), label = "turn")
@@ -365,10 +366,16 @@ private fun ListenOrb(listening: Boolean, level: () -> Float, modifier: Modifier
                 end = Offset(c.x - base * cos(angle0), c.y - base * sin(angle0)),
             ),
         )
-        // The mark, white, beating a little with the sound.
-        val markScale = base * 1.5f / MARK_VIEWPORT * (1f + 0.08f * l * o)
-        translate(c.x - MARK_VIEWPORT / 2f * markScale, c.y - MARK_VIEWPORT / 2f * markScale) {
-            scale(markScale, markScale, pivot = Offset.Zero) { drawPath(mark, Color.White) }
-        }
+        // The Melodix mark, beating a little with the sound.
+        val logoSize = base * 1.35f * (1f + 0.08f * l * o)
+        val left = c.x - logoSize / 2f
+        val top = c.y - logoSize / 2f
+        drawImage(
+            image = logo,
+            srcOffset = androidx.compose.ui.unit.IntOffset.Zero,
+            srcSize = androidx.compose.ui.unit.IntSize(logo.width, logo.height),
+            dstOffset = androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt()),
+            dstSize = androidx.compose.ui.unit.IntSize(logoSize.toInt(), logoSize.toInt()),
+        )
     }
 }

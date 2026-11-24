@@ -25,6 +25,12 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Song recognition (find song nearby via Shazam fingerprinting) & Listen Together voice chat. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Country detection for festival greetings & local radio. Used once, only approximate location. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- QR code scanner for linking devices and importing shared playlists. -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- The phone's own equalizer, opened from the Equalizer page. -->
     <queries>
@@ -38,6 +44,9 @@
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <!-- Melodix's own USB DAC driver (Bit-perfect output, direct driver). -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".OpenTuneApp"

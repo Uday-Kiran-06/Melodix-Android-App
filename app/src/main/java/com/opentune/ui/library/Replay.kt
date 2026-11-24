@@ -228,7 +228,7 @@ private fun ExperienceCard(face: CardFace, index: Int, name: String, since: Stri
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("YOUR LISTENING EXPERIENCE", Modifier.weight(1f), color = Color.White.copy(alpha = 0.85f),
                 fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, maxLines = 1)
-            Icon(painterResource(com.opentune.R.drawable.ic_launcher_monochrome), null, Modifier.size(40.dp).offset(x = 8.dp), tint = Color.White)
+            Icon(painterResource(com.opentune.R.drawable.melodix_monochrome), null, Modifier.size(40.dp).offset(x = 8.dp), tint = Color.White)
         }
         Spacer(Modifier.weight(1f))
         Text(face.value, color = Color.White, style = TextStyle(fontSize = if (face.value.length > 14) 26.sp else 34.sp,
@@ -320,7 +320,7 @@ internal fun ReplayStory(summary: ReplaySummary, range: ReplayRange, onDismiss: 
                 Column(Modifier.fillMaxSize()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(com.opentune.i18n.Tr.f("Replay · {0}", range.heading()), Modifier.weight(1f), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Icon(painterResource(com.opentune.R.drawable.ic_launcher_monochrome), null, Modifier.size(30.dp), tint = Color.White)
+                        Icon(painterResource(com.opentune.R.drawable.melodix_monochrome), null, Modifier.size(30.dp), tint = Color.White)
                         Text("Melodix", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(14.dp))

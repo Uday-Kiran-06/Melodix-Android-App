@@ -39,7 +39,13 @@ class OpenTuneApp : Application(), SingletonImageLoader.Factory {
             .crossfade(200)
             .build()
 
+    companion object {
+        lateinit var instance: OpenTuneApp
+            private set
+    }
+
     override fun onCreate() {
+        instance = this
         super.onCreate()
         // First, so a crash anywhere after this is kept for Export diagnostics.
         com.opentune.data.CrashLog.install(this)

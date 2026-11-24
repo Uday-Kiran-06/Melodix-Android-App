@@ -12,19 +12,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlinx.coroutines.delay
+import com.opentune.R
 
 /** Plays once per launch of the app, not each time the screen is rebuilt. */
 object Opening {
@@ -35,20 +40,20 @@ object Opening {
 val OPENING_FIELD = Color.Black
 
 /**
- * The opening: the mark takes over from the system splash at the same
- * size, settles with a glint of light across it, then the screen dives into
- * it. The white mark turns into a window onto the app, outlined in white,
- * and rushes toward you until the app fills the screen, as if flying
- * through the logo. [onDive] reports the dive, 0 to 1, so the app behind can come
- * forward as it's revealed; [onDone] removes this.
+ * The opening: the Melodix logo takes over from the system splash at the same
+ * size, settles with a gentle breath and a glint of light across it, then dives
+ * forward. An aperture opens in the center, and the logo expands towards you
+ * revealing the Melodix app underneath. [onDive] reports the dive, 0 to 1;
+ * [onDone] removes the splash layer when complete.
  */
 @Composable
 fun OpeningReveal(onDive: (Float) -> Unit, onDone: () -> Unit) {
-    val mark = remember { markPath() }
+    val logo = ImageBitmap.imageResource(id = R.drawable.melodix_icon)
     val settle = remember { Animatable(0f) }
     val dive = remember { Animatable(0f) }
     val done by rememberUpdatedState(onDone)
     val report by rememberUpdatedState(onDive)
+
     LaunchedEffect(Unit) {
         settle.animateTo(1f, tween(SETTLE_MS, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)))
         delay(HOLD_MS)
@@ -57,6 +62,7 @@ fun OpeningReveal(onDive: (Float) -> Unit, onDone: () -> Unit) {
         report(1f)
         done()
     }
+
     Canvas(
         Modifier
             .fillMaxSize()
@@ -65,37 +71,67 @@ fun OpeningReveal(onDive: (Float) -> Unit, onDone: () -> Unit) {
     ) {
         val d = dive.value
         val st = settle.value
-        // The system splash draws the 108-unit icon 240dp across; start exactly there.
-        val base = 240.dp.toPx() / MARK_VIEWPORT
-        val breathe = 1f + 0.05f * kotlin.math.sin(Math.PI.toFloat() * st)
-        val s = base * breathe * exp(ln(ZOOM) * d * d)
-        val window = smooth(0.04f, 0.28f, d)
-        val fade = 1f - smooth(0.8f, 1f, d)
+        val basePx = 160.dp.toPx()
+        val breathe = 1f + 0.04f * sin(Math.PI.toFloat() * st)
+        val s = breathe * exp(ln(ZOOM) * d * d)
+        val window = smooth(0.04f, 0.32f, d)
+        val fade = 1f - smooth(0.75f, 1f, d)
 
+        // Draw background
         drawRect(OPENING_FIELD, alpha = fade)
-        // A white rim that stays the same width on screen however big the mark gets.
-        val rim = Stroke(width = RIM.toPx() / s, join = StrokeJoin.Round)
-        translate(center.x - MARK_VIEWPORT / 2f * s, center.y - MARK_VIEWPORT / 2f * s) {
-            scale(s, s, pivot = Offset.Zero) {
-                drawPath(mark, Color.White, alpha = 1f - window)
-                // A band of light that runs across the mark once as it settles.
-                if (st in 0.05f..0.98f && d == 0f) {
-                    val x = -30f + 170f * st
-                    drawPath(
-                        mark,
-                        Brush.linearGradient(
-                            listOf(Color(0x00DADADA), Color(0xFFDADADA).copy(alpha = 0.9f), Color(0x00DADADA)),
-                            start = Offset(x - 18f, 30f),
-                            end = Offset(x + 18f, 78f),
-                        ),
-                        blendMode = BlendMode.SrcAtop,
-                    )
-                }
-                // Then the mark becomes a window onto the app.
-                if (window > 0f) drawPath(mark, Color.Black, alpha = window, blendMode = BlendMode.DstOut)
-                // Its white edge outlines the window, so the way in shows even when the
-                // app behind is as dark as the field around it.
-                if (fade > 0f) drawPath(mark, Color.White, alpha = fade, style = rim)
+
+        // Draw Melodix Logo
+        val drawW = basePx * s
+        val drawH = basePx * s
+        val left = center.x - drawW / 2f
+        val top = center.y - drawH / 2f
+
+        if (fade > 0f) {
+            drawImage(
+                image = logo,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(logo.width, logo.height),
+                dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                dstSize = IntSize(drawW.roundToInt(), drawH.roundToInt()),
+                alpha = (1f - window * 0.7f).coerceIn(0f, 1f),
+            )
+
+            // A band of light that runs across the logo once as it settles.
+            if (st in 0.05f..0.98f && d == 0f) {
+                val glintX = left + drawW * st
+                drawRect(
+                    brush = Brush.linearGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.45f), Color.Transparent),
+                        start = Offset(glintX - 30.dp.toPx(), top),
+                        end = Offset(glintX + 30.dp.toPx(), top + drawH),
+                    ),
+                    topLeft = Offset(left, top),
+                    size = Size(drawW, drawH),
+                    blendMode = BlendMode.SrcAtop,
+                )
+            }
+        }
+
+        // Window aperture onto the app behind
+        if (window > 0f) {
+            val maxDimension = maxOf(size.width, size.height)
+            val holeRadius = (basePx * 0.35f * s * window).coerceAtLeast(0f)
+
+            drawCircle(
+                color = Color.Black,
+                radius = holeRadius,
+                center = center,
+                blendMode = BlendMode.DstOut,
+            )
+
+            // Outline around the expanding aperture so the edges pop
+            if (fade > 0f && holeRadius < maxDimension * 1.5f) {
+                drawCircle(
+                    color = Color.White.copy(alpha = (fade * (1f - d * 0.5f)).coerceIn(0f, 1f)),
+                    radius = holeRadius,
+                    center = center,
+                    style = Stroke(width = RIM.toPx()),
+                )
             }
         }
     }
@@ -106,10 +142,10 @@ private fun smooth(from: Float, to: Float, x: Float): Float {
     return t * t * (3f - 2f * t)
 }
 
-/** The width of the white edge around the mark. */
+/** The width of the white edge around the aperture. */
 private val RIM = 2.5.dp
 private const val SETTLE_MS = 620
 private const val HOLD_MS = 120L
 private const val DIVE_MS = 900
-/** How many times its size the mark grows to by the end of the dive, enough for its band to fill the screen. */
-private const val ZOOM = 90f
+/** How many times its size the mark grows to by the end of the dive. */
+private const val ZOOM = 65f

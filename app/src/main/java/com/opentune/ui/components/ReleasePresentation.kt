@@ -34,7 +34,7 @@ internal fun ReleaseHero(version: String, status: String) {
         .border(1.dp, colors.onPrimaryContainer.copy(alpha = .12f), shape)
         .padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(painterResource(com.opentune.core.R.drawable.ic_stat_opentune), null, Modifier.size(28.dp), tint = colors.onPrimaryContainer)
+            Icon(painterResource(com.opentune.core.R.drawable.ic_stat_melodix), null, Modifier.size(28.dp), tint = colors.onPrimaryContainer)
             Text("Melodix", style = MaterialTheme.typography.titleMedium, color = colors.onPrimaryContainer)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

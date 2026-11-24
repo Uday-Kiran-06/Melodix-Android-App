@@ -318,25 +318,36 @@ object ShareCard {
     }
 
     /** How wide [drawBrand] draws at [height]: the mark, a gap and the name. */
-    internal fun brandWidth(height: Float): Float = height * MARK_ASPECT + height * 0.35f + brandPaint(height, Color.WHITE).measureText(BRAND)
+    internal fun brandWidth(height: Float): Float = height * 1.05f + height * 0.35f + brandPaint(height, Color.WHITE).measureText(BRAND)
 
     /**
-     * The OpenTune mark and name, [height] tall, ending at [right] and centred
+     * The Melodix mark and name, [height] tall, ending at [right] and centred
      * on [centerY], in [colour]. On every card, so a shared picture says where it's from.
      */
     internal fun drawBrand(c: Canvas, right: Float, centerY: Float, height: Float, colour: Int) {
         val text = brandPaint(height, colour)
         val textW = text.measureText(BRAND)
         c.drawText(BRAND, right - textW, centerY - (text.ascent() + text.descent()) / 2f, text)
-        val markW = height * MARK_ASPECT
+        val markW = height * 1.05f
         val left = right - textW - height * 0.35f - markW
-        val path = com.opentune.ui.components.markPath().asAndroidPath()
-        val s = height / (MARK_BOTTOM - MARK_TOP)
-        c.save()
-        c.translate(left - MARK_LEFT * s, centerY - height / 2f - MARK_TOP * s)
-        c.scale(s, s)
-        c.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colour })
-        c.restore()
+        val logo = runCatching {
+            android.graphics.BitmapFactory.decodeResource(
+                com.opentune.OpenTuneApp.instance.resources,
+                com.opentune.R.drawable.melodix_icon
+            )
+        }.getOrNull()
+        if (logo != null) {
+            val dest = RectF(left, centerY - height / 2f, left + markW, centerY + height / 2f)
+            c.drawBitmap(logo, null, dest, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        } else {
+            val path = com.opentune.ui.components.markPath().asAndroidPath()
+            val s = height / (MARK_BOTTOM - MARK_TOP)
+            c.save()
+            c.translate(left - MARK_LEFT * s, centerY - height / 2f - MARK_TOP * s)
+            c.scale(s, s)
+            c.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colour })
+            c.restore()
+        }
     }
 
     private const val BRAND = "Melodix"
