@@ -114,7 +114,7 @@ private val PULL_ROOM = 72.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MarkIndicator(state: PullToRefreshState, refreshing: Boolean, still: Boolean, modifier: Modifier) {
-    val logo = ImageBitmap.imageResource(com.opentune.R.drawable.melodix_icon)
+    val mark = remember { markPath() }
     // The colours of the song that's playing, so the mark matches the player.
     val (ink, inkEnd) = songAccents()
     val faint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f)
@@ -147,25 +147,37 @@ private fun MarkIndicator(state: PullToRefreshState, refreshing: Boolean, still:
                 translationY = -20.dp.toPx() * (1f - f.coerceAtMost(1f))
             },
     ) {
-        val logoSize = 36.dp.toPx()
-        val left = (size.width - logoSize) / 2f
-        val top = (size.height - logoSize) / 2f
+        // The mark's own extent in the icon's 108 units, so it fills this box.
+        val mw = MARK_RIGHT - MARK_LEFT
+        val mh = MARK_BOTTOM - MARK_TOP
+        val s = minOf(size.width / mw, size.height / mh)
+        val ox = (size.width - mw * s) / 2f - MARK_LEFT * s
+        val oy = (size.height - mh * s) / 2f - MARK_TOP * s
+        val fill = if (refreshing) 1f else state.distanceFraction.coerceIn(0f, 1f)
+        // While loading, it sways as a wave runs through it.
         val sway = if (refreshing && !still) 1f + 0.12f * sin(2f * PI.toFloat() * t) else 1f
-        scale(1f, sway, pivot = Offset(size.width / 2f, size.height / 2f)) {
-            drawImage(
-                image = logo,
-                srcOffset = androidx.compose.ui.unit.IntOffset.Zero,
-                srcSize = androidx.compose.ui.unit.IntSize(logo.width, logo.height),
-                dstOffset = androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt()),
-                dstSize = androidx.compose.ui.unit.IntSize(logoSize.toInt(), logoSize.toInt()),
-                alpha = if (refreshing) 1f else state.distanceFraction.coerceIn(0.3f, 1f),
-            )
+        translate(ox, oy) {
+            // Scaled from the corner to fit, then the sway stretches it about its own middle.
+            scale(s, s, pivot = Offset.Zero) {
+                scale(1f, sway, pivot = Offset((MARK_LEFT + MARK_RIGHT) / 2f, (MARK_TOP + MARK_BOTTOM) / 2f)) {
+                    drawPath(mark, faint)
+                    // Filled with the accent from the left as the pull goes on.
+                    clipRect(right = MARK_LEFT + mw * fill) {
+                        drawPath(mark, Brush.horizontalGradient(listOf(ink, inkEnd), startX = MARK_LEFT, endX = MARK_RIGHT))
+                    }
+                    if (refreshing && !still) {
+                        val x = MARK_LEFT - 20f + (mw + 40f) * t
+                        drawPath(
+                            mark,
+                            Brush.linearGradient(
+                                listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.75f), Color.White.copy(alpha = 0f)),
+                                start = Offset(x - 12f, 40f),
+                                end = Offset(x + 12f, 68f),
+                            ),
+                        )
+                    }
+                }
+            }
         }
     }
 }
-
-// Where the mark sits in the icon's 108-unit square.
-private const val MARK_LEFT = 27.8f
-private const val MARK_RIGHT = 80.3f
-private const val MARK_TOP = 34.9f
-private const val MARK_BOTTOM = 73.1f

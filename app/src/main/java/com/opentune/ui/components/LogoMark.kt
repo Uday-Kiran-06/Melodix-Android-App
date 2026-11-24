@@ -9,6 +9,10 @@ import androidx.compose.ui.graphics.vector.PathParser
  * at any size (the opening animation zooms into it).
  */
 internal const val MARK_VIEWPORT = 108f
+internal const val MARK_LEFT = 24f
+internal const val MARK_RIGHT = 84f
+internal const val MARK_TOP = 28f
+internal const val MARK_BOTTOM = 82f
 
 internal val MARK_PATH_DATA: String =
     "M 30,28 C 26,28 24,31 24,36 L 24,54 C 24,70 37.5,82 54,82 " +

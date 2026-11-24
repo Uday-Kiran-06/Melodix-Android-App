@@ -333,7 +333,7 @@ object ShareCard {
         val logo = runCatching {
             android.graphics.BitmapFactory.decodeResource(
                 com.opentune.OpenTuneApp.instance.resources,
-                com.opentune.R.drawable.melodix_icon
+                com.opentune.R.drawable.melodix_foreground
             )
         }.getOrNull()
         if (logo != null) {
