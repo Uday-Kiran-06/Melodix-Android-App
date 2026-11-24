@@ -255,7 +255,7 @@ fun DiscordLoginScreen(onDone: () -> Unit) {
         brand = DiscordBlurple,
         icon = Icons.Rounded.Headphones,
         logo = com.opentune.R.drawable.ic_discord,
-        gives = "The song you play on your Discord profile, as \"Playing on OpenTune\"",
+        gives = "The song you play on your Discord profile, as \"Playing on Melodix\"",
         loading = loading,
         onBack = leave,
         hint = problem,
@@ -263,7 +263,7 @@ fun DiscordLoginScreen(onDone: () -> Unit) {
         extra = { closeHelp ->
             androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 12.dp)) {
                 androidx.compose.material3.TextButton(onClick = { closeHelp(); onPage = !onPage; problem = null; loading = false }) {
-                    com.opentune.ui.theme.Text(if (onPage) "Use OpenTune's form" else "Use Discord's page")
+                    com.opentune.ui.theme.Text(if (onPage) "Use Melodix's form" else "Use Discord's page")
                 }
                 if (onPage) androidx.compose.material3.TextButton(onClick = { closeHelp(); pageAttempt++; problem = null; loading = true }) {
                     com.opentune.ui.theme.Text("Retry page")
@@ -488,7 +488,7 @@ private fun CaptchaView(asked: DiscordLogin.Step.Captcha, modifier: Modifier, on
                 addJavascriptInterface(object {
                     @android.webkit.JavascriptInterface fun solved(key: String) { main.post { onSolved(key) } }
                     @android.webkit.JavascriptInterface fun failed(why: String) { main.post { onFailed(why) } }
-                }, "OpenTune")
+                }, "Melodix")
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
                         // The puzzle's own frames load as they like; a link it opens in the page (its terms) goes outside.

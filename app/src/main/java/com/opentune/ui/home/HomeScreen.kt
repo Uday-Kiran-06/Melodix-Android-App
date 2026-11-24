@@ -451,7 +451,7 @@ fun HomeScreen(
                     }
                     id == "community" -> item(key = "featured-playlists") {
                         HomeShelfView(HomeShelf(runtime.title("featured-playlists", "From the community"), runtime.playlists.map {
-                            ShelfItem(it.title, "OpenTune picks", it.artwork, null, it.browseId)
+                            ShelfItem(it.title, "Melodix picks", it.artwork, null, it.browseId)
                         }), { item -> com.opentune.data.reco.HomeEngagement.record("community"); onItemClick(item) },
                             songRows = false, covers = covers, coverKey = "featured-playlists", action = {
                             // Closed until a playlist is added that wasn't there now.

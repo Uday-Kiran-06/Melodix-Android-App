@@ -205,7 +205,7 @@ fun Modifier.glass(shape: Shape, tint: Color = MaterialTheme.colorScheme.surface
     }
     if (backdrop != null && liquidGlassOn()) {
         // A see-through dark (or light) film rather than the theme's grey, so
-        // the colour behind comes through. OpenTune's film carries a little of
+        // the colour behind comes through. Melodix's film carries a little of
         // the accent, so the glass reads as part of the theme rather than plain smoke.
         val neutral = if (dark) Color(0xFF101014) else Color(0xFFF7F7FA)
         val film = when {

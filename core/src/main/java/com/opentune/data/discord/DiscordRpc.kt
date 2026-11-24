@@ -33,7 +33,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * "Playing on OpenTune" on the listener's Discord profile, from the phone.
+ * "Playing on Melodix" on the listener's Discord profile, from the phone.
  *
  * A phone has no Discord app socket to talk to, as the desktop does, and
  * Discord offers no API for another app to set someone's status. So, as on
@@ -223,7 +223,7 @@ object DiscordRpc {
         val image = art?.let { externalAsset(token, it) ?: it }
         val activity = JSONObject()
             // A type-2 (Listening) activity, the way BitChord shows it: Discord heads
-            // the card "Listening to OpenTune", draws the song's progress as a bar
+            // the card "Listening to Melodix", draws the song's progress as a bar
             // from the timestamps, and puts details over state under the artwork.
             .put("name", APP_NAME)
             .put("type", 2)
@@ -241,7 +241,7 @@ object DiscordRpc {
         }
         if (com.opentune.data.isYouTubeId(now.videoId)) {
             activity.put("details_url", watch)
-            activity.put("buttons", JSONArray().put(fit("Listen on YouTube Music", LABEL_MAX)).put(fit("Get OpenTune", LABEL_MAX)))
+            activity.put("buttons", JSONArray().put(fit("Listen on YouTube Music", LABEL_MAX)).put(fit("Get Melodix", LABEL_MAX)))
             activity.put("metadata", JSONObject().put("button_urls", JSONArray().put(watch).put(PROJECT_URL)))
         }
         applicationId.takeIf { it.isNotEmpty() }?.let { activity.put("application_id", it) }

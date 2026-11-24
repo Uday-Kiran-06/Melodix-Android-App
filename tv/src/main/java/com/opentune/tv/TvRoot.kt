@@ -136,7 +136,7 @@ fun TvRoot(player: TvPlayer, voice: MutableStateFlow<String?> = MutableStateFlow
         }
     }
 
-    // "Play … on OpenTune" from the voice search opens Search with it typed in.
+    // "Play … on Melodix" from the voice search opens Search with it typed in.
     val spoken by voice.collectAsState()
     LaunchedEffect(spoken) {
         spoken?.let { nav.goTab(Dest.Search); nav.pendingSearch = it; voice.value = null }
@@ -198,7 +198,7 @@ private fun TopBar(nav: TvNav, current: Dest, player: TvPlayer) {
         Modifier.fillMaxWidth().padding(horizontal = TvSafe.Horizontal, vertical = TvSafe.Vertical),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("OpenTune", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 28.dp))
+        Text("Melodix", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 28.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Tabs.forEach { tab ->
                 TvPill(

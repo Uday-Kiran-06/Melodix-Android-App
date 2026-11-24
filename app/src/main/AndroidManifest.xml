@@ -36,7 +36,7 @@
     <!-- Nothing here is required hardware. Television has its own app (:tv). -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
-    <!-- OpenTune's own USB DAC driver (Bit-perfect output, direct driver). -->
+    <!-- Melodix's own USB DAC driver (Bit-perfect output, direct driver). -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <application
@@ -98,12 +98,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="melodix" android:host="together" />
             </intent-filter>
-            <!-- "Play … on OpenTune" from the Assistant. -->
+            <!-- "Play … on Melodix" from the Assistant. -->
             <intent-filter>
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <!-- Shared links ("Share to OpenTune"). -->
+            <!-- Shared links ("Share to Melodix"). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -210,7 +210,7 @@
                 android:resource="@xml/share_paths" />
         </provider>
 
-        <!-- Shows OpenTune as a media app in Android Auto. -->
+        <!-- Shows Melodix as a media app in Android Auto. -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />

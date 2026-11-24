@@ -1476,7 +1476,7 @@ fun PlayerLayout(
                         close()
                         scope.launch {
                             val log = LogExport.recent()
-                            clipboard.setPrimaryClip(ClipData.newPlainText("OpenTune log", log))
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Melodix log", log))
                             com.opentune.data.Pills.done("Log copied", context)
                         }
                     }

@@ -153,7 +153,7 @@ object AddonHttp {
                         if (it.isRedirect) Reply(byteArrayOf(), it.header("Location") ?: throw IOException("Invalid redirect"))
                         else {
                             if (!it.isSuccessful) {
-                                val paused = it.header("X-OpenTune-Paused") == "1"
+                                val paused = it.header("X-Melodix-Paused") == "1"
                                 throw Failure(it.code, it.header("Retry-After")?.toLongOrNull()?.coerceIn(0, if (paused) 86_400 else 600) ?: 0, paused)
                             }
                             val source = it.body?.source() ?: throw IOException("Empty add-on response")

@@ -70,7 +70,7 @@ object Ringtones {
                 resolver.update(uri, ContentValues().apply { put(kind.column, 1) }, null, null)
                 return uri
             }
-            values.put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_RINGTONES}/OpenTune")
+            values.put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_RINGTONES}/Melodix")
             values.put(MediaStore.Audio.Media.IS_PENDING, 1)
             val uri = resolver.insert(collection, values) ?: error("Couldn't add the ringtone")
             try {
@@ -83,7 +83,7 @@ object Ringtones {
             return uri
         }
         @Suppress("DEPRECATION")
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES), "OpenTune").apply { mkdirs() }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES), "Melodix").apply { mkdirs() }
         val target = File(dir, name)
         if (!target.exists()) file.copyTo(target)
         @Suppress("DEPRECATION")

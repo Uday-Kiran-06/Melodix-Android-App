@@ -160,7 +160,7 @@ private fun TvPicker(vm: TvRemoteViewModel, contentPadding: PaddingValues, onBac
 
     if (scanning) QrScannerDialog(onDismiss = { scanning = false }) { text ->
         scanning = false
-        if (!vm.pair(text)) Pills.error("That isn't a code from OpenTune on a TV", context)
+        if (!vm.pair(text)) Pills.error("That isn't a code from Melodix on a TV", context)
     }
     forgetting?.let { tv ->
         AlertDialog(
@@ -176,7 +176,7 @@ private fun TvPicker(vm: TvRemoteViewModel, contentPadding: PaddingValues, onBac
         item { PageHeader("Control the TV", onBack = onBack) }
         item {
             Text(
-                "Use this phone as a trackpad and remote for OpenTune on your TV. Both need to be on the same Wi-Fi, with OpenTune open on the TV.",
+                "Use this phone as a trackpad and remote for Melodix on your TV. Both need to be on the same Wi-Fi, with Melodix open on the TV.",
                 style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
             )
@@ -194,7 +194,7 @@ private fun TvPicker(vm: TvRemoteViewModel, contentPadding: PaddingValues, onBac
             item {
                 Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Pair your TV once", style = MaterialTheme.typography.titleMedium)
-                    Text("1. On the TV, open OpenTune, then Settings, then Pair a phone.", style = MaterialTheme.typography.bodyMedium)
+                    Text("1. On the TV, open Melodix, then Settings, then Pair a phone.", style = MaterialTheme.typography.bodyMedium)
                     Text("2. Scan the code it shows.", style = MaterialTheme.typography.bodyMedium)
                     Text("After that this phone finds the TV by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -238,7 +238,7 @@ private fun TvRow(tv: PairedTv, online: Boolean, onClick: () -> Unit, onForget: 
         Column(Modifier.padding(start = 16.dp).weight(1f)) {
             Text(tv.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (online) "On this network" else "Not seen yet. Open OpenTune on the TV",
+                if (online) "On this network" else "Not seen yet. Open Melodix on the TV",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

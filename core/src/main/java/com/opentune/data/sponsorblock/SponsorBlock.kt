@@ -71,7 +71,7 @@ object SponsorBlock {
             .addQueryParameter("categories", categories.joinToString(",", "[", "]") { "\"$it\"" })
             .addQueryParameter("actionTypes", "[\"skip\"]")
             .build()
-        val request = Request.Builder().url(url).header("User-Agent", "OpenTune/${BuildConfig.VERSION_NAME}").build()
+        val request = Request.Builder().url(url).header("User-Agent", "Melodix/${BuildConfig.VERSION_NAME}").build()
         return Http.client.newCall(request).execute().use { r ->
             when {
                 r.code == 404 -> emptyList() // nothing marked for any video with this prefix

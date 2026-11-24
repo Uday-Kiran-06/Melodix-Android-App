@@ -328,7 +328,7 @@ object Radio {
         }
 
     // Radio Browser asks for a User-Agent naming the app.
-    private fun request(url: HttpUrl) = Request.Builder().url(url).header("User-Agent", "OpenTune/${BuildConfig.VERSION_NAME}").build()
+    private fun request(url: HttpUrl) = Request.Builder().url(url).header("User-Agent", "Melodix/${BuildConfig.VERSION_NAME}").build()
 
     /** Stations out of a directory answer, without the ones that have no stream. */
     internal fun parse(body: String): List<Station> {

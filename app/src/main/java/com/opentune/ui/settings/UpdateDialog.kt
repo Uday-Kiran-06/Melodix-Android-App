@@ -118,7 +118,7 @@ fun UpdateDialog(found: UpdateCheck.Release, onDismiss: () -> Unit, onNotNow: (U
 
     FloatingCard(
         onDismiss = onDismiss,
-        title = "A new OpenTune",
+        title = "A new Melodix",
         dismissible = progress == null,
         actions = {
             Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
@@ -128,7 +128,7 @@ fun UpdateDialog(found: UpdateCheck.Release, onDismiss: () -> Unit, onNotNow: (U
                         onDismiss()
                     } else start()
                 }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text(if (progress != null) "Downloading…" else if (apk == null) "Open release page" else "Update OpenTune")
+                    Text(if (progress != null) "Downloading…" else if (apk == null) "Open release page" else "Update Melodix")
                 }
                 TextButton(onClick = {
                     if (progress != null) install.cancel() else onNotNow(release)

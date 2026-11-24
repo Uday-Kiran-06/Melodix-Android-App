@@ -81,7 +81,7 @@ import java.util.Locale
  */
 object StreamResolver {
 
-    private const val TAG = "OpenTune"
+    private const val TAG = "Melodix"
 
     /** Past this, an extractor fetch is worth flagging rather than just noting. */
     private const val SLOW_FETCH_MS = 2000L

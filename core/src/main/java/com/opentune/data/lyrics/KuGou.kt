@@ -125,7 +125,7 @@ object KuGou {
     }
 
     private fun get(url: HttpUrl): JsonElement? {
-        val call = Http.client.newCall(Request.Builder().url(url).header("User-Agent", "OpenTune").build())
+        val call = Http.client.newCall(Request.Builder().url(url).header("User-Agent", "Melodix").build())
         return call.execute().use { r ->
             if (!r.isSuccessful) throw java.io.IOException("KuGou answered ${r.code}")
             r.body?.string()?.let(json::parseToJsonElement)

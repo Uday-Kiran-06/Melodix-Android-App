@@ -215,7 +215,7 @@ fun LyricCardSheet(song: Song, lines: List<String>, startAt: Int, onDismiss: () 
     val list = rememberLazyListState()
     // Open on the line being sung, a little way down so the lines before it show too.
     LaunchedEffect(Unit) { if (pickable && startAt > 0) list.scrollToItem((startAt - 2).coerceAtLeast(0)) }
-    val fileName = "OpenTune-lyrics-${song.videoId}${if (story) "-story" else ""}.png"
+    val fileName = "Melodix-lyrics-${song.videoId}${if (story) "-story" else ""}.png"
     FloatingCard(
         onDismiss = onDismiss,
         title = "Share lyrics",
@@ -237,7 +237,7 @@ fun LyricCardSheet(song: Song, lines: List<String>, startAt: Int, onDismiss: () 
                     haptics.press()
                     scope.launch {
                         val saved = runCatching { ShareCard.saveImage(context, card, fileName) }.isSuccess
-                        if (saved) com.opentune.data.Pills.done("Saved to Pictures/OpenTune", context) else com.opentune.data.Pills.error("Couldn't save the card", context)
+                        if (saved) com.opentune.data.Pills.done("Saved to Pictures/Melodix", context) else com.opentune.data.Pills.error("Couldn't save the card", context)
                     }
                 },
             )

@@ -81,7 +81,7 @@ internal fun SignInPage(
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(gives, style = MaterialTheme.typography.bodyLarge)
             Text(privacy ?: com.opentune.i18n.Tr.f(
-                "You sign in on {0}'s own page. Only the sign-in is kept on this phone; your password never reaches OpenTune.", service),
+                "You sign in on {0}'s own page. Only the sign-in is kept on this phone; your password never reaches Melodix.", service),
                 style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
             if (hint != null) Text(hint, style = MaterialTheme.typography.bodyMedium)
             extra?.invoke { showHelp = false }

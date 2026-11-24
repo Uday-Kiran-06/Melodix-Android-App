@@ -39,7 +39,7 @@ internal val MAIN_PAGE_ONLY = setOf("Audio sources")
 /** A short line under a subsection's card, saying what it's for. */
 internal val GROUP_NOTES = mapOf(
     "YouTube Music" to "A Google account can have Personal and Brand profiles. Each has its own library, likes and history.",
-    "Connected services" to "Each one is optional. Spotify brings over your playlists; songs still play through OpenTune's own sources.",
+    "Connected services" to "Each one is optional. Spotify brings over your playlists; songs still play through Melodix's own sources.",
 )
 
 /**
@@ -146,7 +146,7 @@ internal val SETTINGS_CATEGORIES = listOf(
         "about", "About", "Updates, source code and diagnostics", Icons.Rounded.Info,
         listOf(
             "Updates" to listOf("What's new", "Check for updates", "Check for updates automatically"),
-            "Community" to listOf("OpenTune community", "Support OpenTune", "Star on GitHub", "Source code"),
+            "Community" to listOf("Melodix community", "Support Melodix", "Star on GitHub", "Source code"),
             "Developers" to listOf("justshivv", "aerluc"),
             "Help" to listOf("Show the welcome again", "Count this phone in usage numbers", "Export diagnostics"),
         ),
