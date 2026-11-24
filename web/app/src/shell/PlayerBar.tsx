@@ -1,0 +1,193 @@
+import { MonitorSmartphone } from 'lucide-react';
+import { useState } from 'react';
+import {
+  BackwardIcon,
+  ForwardIcon,
+  LyricsActiveIcon,
+  LyricsIcon,
+  PauseIcon,
+  PlayIcon,
+  RepeatIcon,
+  RepeatOneIcon,
+  ShuffleIcon,
+  UpNextIcon,
+  VolumeIcon,
+} from '@/components/icons/Transport';
+import { FavoriteButton } from '@/components/music/FavoriteButton';
+import { useLyrics } from '@/lyrics/useLyrics';
+import { usePlayer } from '@/state/player';
+import { useUi } from '@/state/ui';
+import { useLiquidGlass } from '@/lib/liquidGlass';
+import { Lcd } from './Lcd';
+import { useControlling } from '@/connect/connect';
+import { RemoteLcd } from '@/connect/RemoteLcd';
+
+// A soft fill on hover and a little give when pressed, as the full player's buttons have.
+const feedback = 'transition-[background-color,opacity,scale] duration-150 ease-out enabled:hover:bg-quinary enabled:active:scale-90';
+const control = `grid place-items-center rounded-[6px] ${feedback} disabled:opacity-40`;
+// Shuffle and repeat: secondary, and when on the key colour on a fill of it with a dot under (.ot-toggle).
+const toggle = `${control} ot-toggle size-7 text-secondary aria-pressed:text-key`;
+const transport = `${control} size-7 text-primary`;
+const action = `grid h-7 w-6 place-items-center rounded-[4px] ${feedback} text-primary aria-pressed:text-key`;
+// The actions the volume level slides in over: they fade out while it's open.
+const fading = `${action} group-data-volume-open/actions:pointer-events-none group-data-volume-open/actions:opacity-0`;
+
+const slider = [
+  'absolute top-1/2 right-[33px] mx-0 mb-0 -mt-2 block h-4 w-24 cursor-pointer appearance-none bg-transparent',
+  'pointer-events-none translate-x-2 opacity-0 transition-[opacity,translate]',
+  'data-open:pointer-events-auto data-open:translate-none data-open:opacity-100',
+  '[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-[2px] [&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--systemPrimary)_var(--fill),var(--systemQuaternary)_var(--fill))]',
+  '[&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-[2px] [&::-moz-range-track]:bg-[linear-gradient(to_right,var(--systemPrimary)_var(--fill),var(--systemQuaternary)_var(--fill))]',
+  '[&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_2px_#0006]',
+  '[&::-moz-range-thumb]:size-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-[0_0_2px_#0006]',
+].join(' ');
+
+/**
+ * Apple's volume control: the speaker mutes, and hovering it slides the level
+ * in where the other actions were (they fade out while it's open).
+ */
+function VolumeControl({ open, onOpen }: { open: boolean; onOpen: () => void }) {
+  const volume = usePlayer((s) => s.volume);
+  const muted = usePlayer((s) => s.muted);
+  const setVolume = usePlayer((s) => s.setVolume);
+  const toggleMute = usePlayer((s) => s.toggleMute);
+  const level = muted ? 0 : volume;
+  return (
+    <>
+      <input
+        className={slider}
+        data-open={open || undefined}
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={level}
+        aria-label="Volume"
+        tabIndex={open ? 0 : -1}
+        style={{ '--fill': `${level * 100}%` } as React.CSSProperties}
+        onChange={(e) => setVolume(Number(e.currentTarget.value))}
+        onWheel={(e) => setVolume(level - Math.sign(e.deltaY) * 0.05)}
+      />
+      <button
+        className={action}
+        aria-label={muted ? 'Unmute' : 'Mute'}
+        aria-pressed={muted}
+        onClick={toggleMute}
+        onPointerEnter={onOpen}
+        onFocus={onOpen}
+        // Scrolling over the speaker turns it up or down, as on most desktop players.
+        onWheel={(e) => setVolume(level - Math.sign(e.deltaY) * 0.05)}
+      >
+        <VolumeIcon level={level} size={20} />
+      </button>
+    </>
+  );
+}
+
+/** The floating glass player pill (report §1). */
+export function PlayerBar() {
+  const sidePanel = useUi((s) => s.sidePanel);
+  const toggleSidePanel = useUi((s) => s.toggleSidePanel);
+  const lyrics = useLyrics();
+  const hasLyrics = !!lyrics.data || sidePanel === 'lyrics';
+  // Another of the person's devices playing: the bar shows and controls it (see Connect).
+  const remote = useControlling();
+  const hasTrack = usePlayer((s) => s.nowPlaying !== null) || !!remote;
+  const videoId = usePlayer((s) => s.nowPlaying?.videoId ?? null);
+  const playingHere = usePlayer((s) => s.status === 'playing' || s.status === 'buffering');
+  const playing = remote ? !!remote.state?.playing : playingHere;
+  const hasNext = usePlayer((s) => s.index + 1 < s.queue.length || s.repeat !== 'off' || (s.autoplay && s.index >= 0)) || !!remote;
+  const localShuffle = usePlayer((s) => s.shuffle);
+  const localRepeat = usePlayer((s) => s.repeat);
+  const shuffle = remote ? !!remote.state?.shuffle : localShuffle;
+  const repeat = remote ? (remote.state?.repeat ?? 'off') : localRepeat;
+  const { togglePlay, next, previous, toggleShuffle, cycleRepeat } = usePlayer.getState();
+  const [volumeOpen, setVolumeOpen] = useState(false);
+  const glass = useLiquidGlass<HTMLDivElement>(24, 26);
+
+  return (
+    // The side panel overlays the page; the pill re-centres in what's left. It slides there
+    // (translate, on the compositor) rather than the row's padding growing under it.
+    <div
+      data-shift="bar"
+      className="group/bar pointer-events-none absolute right-0 bottom-(--player-bottom-offset) left-(--web-navigation-width) z-[calc(var(--z-web-chrome)-1)] flex justify-center px-5 max-sm:hidden"
+      data-panel-open={sidePanel !== null}
+    >
+      <div
+        ref={glass}
+        data-player-origin
+        className="glass-pill group/pill pointer-events-auto relative grid h-(--player-pill-height) w-[min(668px,100%)] grid-cols-[184px_minmax(180px,427px)_minmax(57px,auto)] items-center rounded-pill px-4 transition-[translate] duration-(--duration-panel) ease-(--ot-ease-emph) group-data-[panel-open=true]/bar:w-[min(668px,100%-var(--side-panel-width)-20px)] group-data-[panel-open=true]/bar:-translate-x-[calc((var(--side-panel-width)+20px)/2)]"
+        role="region"
+        aria-label="Player"
+      >
+        <div className="flex items-center justify-between pr-2">
+          <button className={toggle} aria-label="Shuffle" aria-pressed={shuffle} onClick={toggleShuffle}>
+            <ShuffleIcon size={28} />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <button className={transport} disabled={!hasTrack} aria-label="Previous" onClick={previous}>
+              <BackwardIcon size={26} />
+            </button>
+            <button className={transport} disabled={!hasTrack} aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay}>
+              {playing ? <PauseIcon size={28} /> : <PlayIcon size={28} />}
+            </button>
+            <button className={transport} disabled={!hasTrack || !hasNext} aria-label="Next" onClick={next}>
+              <ForwardIcon size={26} />
+            </button>
+          </div>
+          <button
+            className={toggle}
+            aria-label={repeat === 'one' ? 'Repeat one' : repeat === 'all' ? 'Repeat all' : 'Repeat'}
+            aria-pressed={repeat !== 'off'}
+            onClick={cycleRepeat}
+          >
+            {repeat === 'one' ? <RepeatOneIcon size={28} /> : <RepeatIcon size={28} />}
+          </button>
+        </div>
+
+        <div className="h-full min-w-0 px-4">
+          {remote ? <RemoteLcd device={remote} /> : <Lcd />}
+        </div>
+
+        <div
+          className="group/actions relative flex items-center justify-end gap-[9px]"
+          data-volume-open={volumeOpen || undefined}
+          onPointerLeave={() => setVolumeOpen(false)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setVolumeOpen(false);
+          }}
+        >
+          <FavoriteButton videoId={videoId} className={fading} />
+          {hasLyrics && (
+            <button
+              className={fading}
+              aria-label="Lyrics"
+              aria-pressed={sidePanel === 'lyrics'}
+              onClick={() => toggleSidePanel('lyrics')}
+            >
+              {sidePanel === 'lyrics' ? <LyricsActiveIcon size={18} /> : <LyricsIcon size={18} />}
+            </button>
+          )}
+          <button
+            className={fading}
+            aria-label="Up Next"
+            aria-pressed={sidePanel === 'up-next'}
+            onClick={() => toggleSidePanel('up-next')}
+          >
+            <UpNextIcon size={18} />
+          </button>
+          <button
+            className={`${fading} ${remote ? 'text-key' : ''}`}
+            aria-label="Devices"
+            aria-pressed={sidePanel === 'devices'}
+            onClick={() => toggleSidePanel('devices')}
+          >
+            <MonitorSmartphone size={18} />
+          </button>
+          <VolumeControl open={volumeOpen} onOpen={() => setVolumeOpen(true)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+

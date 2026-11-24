@@ -1,0 +1,23 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // NewPipeExtractor (YouTube stream resolution) is published via JitPack.
+        maven("https://jitpack.io")
+    }
+}
+
+rootProject.name = "Melodix"
+include(":app")
+include(":core")
+include(":wear")
+include(":tv")
+include(":desktop")

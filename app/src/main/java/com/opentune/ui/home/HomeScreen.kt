@@ -1,0 +1,899 @@
+package com.opentune.ui.home
+
+import kotlinx.coroutines.launch
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.SnapPosition
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.foundation.layout.Spacer
+import com.opentune.ui.theme.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import com.opentune.ui.theme.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.opentune.data.account.AccountStore
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.opentune.data.MusicRepository
+import com.opentune.data.ContentFilter
+import com.opentune.data.history.History
+import com.opentune.data.model.HomeShelf
+import com.opentune.data.model.ROW_ART_PX
+import com.opentune.data.model.ShelfItem
+import com.opentune.data.model.Song
+import com.opentune.data.model.UiState
+import com.opentune.data.model.artworkAt
+import com.opentune.data.settings.AppSettings
+import com.opentune.ui.browse.SongActions
+import com.opentune.ui.components.SongRowPlaceholder
+import com.opentune.ui.components.Artwork
+import com.opentune.ui.components.ErrorState
+import com.opentune.ui.components.GlassIconButton
+import com.opentune.ui.components.ItemCard
+import com.opentune.ui.components.SectionHeader
+import com.opentune.ui.components.Shelf
+import com.opentune.ui.components.ShelfPlaceholder
+import com.opentune.ui.components.SongListItem
+import com.opentune.ui.rememberLoader
+import com.opentune.ui.toSong
+import com.opentune.ui.type
+import com.opentune.ui.cardMenu
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(
+    contentPadding: PaddingValues,
+    actions: SongActions,
+    onItemClick: (ShelfItem) -> Unit,
+    onOpenSettings: () -> Unit,
+    /** Opens the page that names a song from what the microphone hears. */
+    onRecognize: (() -> Unit)? = null,
+    /** The full player is open over the page, so nothing on it needs to move. */
+    covered: Boolean = false,
+    /** Opens every Speed dial pick on a page of its own. */
+    onOpenSpeedDial: () -> Unit = {},
+) {
+    val platform = "android"
+    val runtime by com.opentune.data.config.RemoteConfig.state.collectAsState()
+    val closedBanners by com.opentune.data.config.HomeDismissals.banners.collectAsState()
+    val closedPlaylists by com.opentune.data.config.HomeDismissals.playlists.collectAsState()
+    val playback by AppSettings.playback.collectAsState()
+    val loader = rememberLoader("home:${playback.recommender.name}") { MusicRepository.home() }
+    val state by loader.state.collectAsState()
+    val refreshing by loader.refreshing.collectAsState()
+    // New picks shown as soon as they're made, while the rest of the page reloads. They stay
+    // until the next refresh: YouTube Music's own Quick picks, the same every time, showed
+    // first and were swapped for these a few seconds later.
+    var freshPicks by remember { mutableStateOf<HomeShelf?>(null) }
+    var picksPending by remember { mutableStateOf(false) }
+    val pickScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Pulling Home down also shuffles the rows below its top (see HomeLayout).
+    var shuffleTurn by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+    val refreshHome: () -> Unit = {
+        shuffleTurn++
+        freshPicks = null
+        picksPending = true
+        val picks = MusicRepository.refreshPicks()
+        pickScope.launch {
+            try { picks.await().firstOrNull()?.let { freshPicks = it } } finally { picksPending = false }
+        }
+        loader.reload(keepContent = true)
+    }
+    val moreAll by MusicRepository.homeMore.collectAsState()
+    val library by AppSettings.library.collectAsState()
+    val hideExplicit = library.hideExplicit
+    // What the user hid is taken off every song shelf and out of the mixes.
+    val hidden by com.opentune.data.library.LibraryStore.hidden.collectAsState()
+    val more = remember(moreAll, hideExplicit, hidden) { hidden.shelves(ContentFilter.shelves(moreAll, hideExplicit)) }
+    val records by History.records.collectAsState()
+    val newestListen = records.firstOrNull()?.playedAt
+    var shownListen by remember { mutableStateOf(newestListen) }
+    var lastListeningRefresh by remember { mutableStateOf(0L) }
+    LaunchedEffect(newestListen, covered) {
+        if (!covered && newestListen != shownListen) {
+            val wait = (60_000L - (android.os.SystemClock.elapsedRealtime() - lastListeningRefresh)).coerceAtLeast(0)
+            kotlinx.coroutines.delay(wait)
+            shownListen = newestListen
+            lastListeningRefresh = android.os.SystemClock.elapsedRealtime()
+            refreshHome()
+        }
+    }
+    val recents = remember(records, hideExplicit) { ContentFilter.songs(History.recents(records, 100), hideExplicit) }
+    // Not saved with the page: a page opened from inside it (an artist, from a
+    // song's menu) is left with one back press, not one that brings the list up again.
+    var historyOpen by remember { mutableStateOf(false) }
+    val first = (state as? UiState.Success<List<HomeShelf>>)?.data?.let { hidden.shelves(ContentFilter.shelves(it, hideExplicit)) }.orEmpty()
+    val allShelves = first + more
+    val feed = remember(first, more) {
+        val firstPage = arrangeHomeShelves(first)
+        arrangeHomeShelves(allShelves).copy(quickPicks = firstPage.quickPicks ?: arrangeHomeShelves(allShelves).quickPicks)
+    }
+    // YouTube Music's own Speed dial when it sends one (signed in), else the songs
+    // played most on this phone, with what's hidden or filtered left out.
+    val collectionPlays by com.opentune.data.history.ListenedCollections.plays.collectAsState()
+    val localDial = remember(records, collectionPlays, hidden, hideExplicit) {
+        val picks = com.opentune.data.history.SpeedDial.fromHistory(records, collections = collectionPlays)
+        hidden.shelves(ContentFilter.shelves(listOf(HomeShelf(com.opentune.data.history.SpeedDial.TITLE, picks)), hideExplicit))
+            .firstOrNull()?.items.orEmpty()
+    }
+    val speedDial = com.opentune.data.history.SpeedDial.personalized(localDial, feed.speedDial?.items.orEmpty())
+    androidx.compose.runtime.SideEffect { SpeedDialItems.items = speedDial }
+    // With little history, mixes from the followed artists fill in (see HomeSeed);
+    // what the user hid stays out of both.
+    val seedsAll by MusicRepository.seeds.collectAsState()
+    val seeds = remember(seedsAll, hidden) {
+        seedsAll.filterNot { hidden.hidesArtist(it.name, it.browseId) }
+            .map { it.copy(top = hidden.songs(it.top), radio = hidden.songs(it.radio)) }
+    }
+    val mixes = remember(records, seeds, hidden) {
+        com.opentune.data.reco.HomeSeed.mixes(com.opentune.data.history.DailyMixes.build(records, hidden = hidden), seeds, records.size)
+    }
+    // One mix for each genre played most, from the artists' genres as they're learnt; the most
+    // played artists are looked up first, a few at a time, and kept.
+    val artistGenres by com.opentune.data.metadata.ArtistGenres.genres.collectAsState()
+    // Kept as made for twelve hours (see MixSnapshots): playing a song or coming back to Home
+    // shows the same mixes in the same order. Made again once they're older, or when a genre
+    // turns up that has no mix yet.
+    val savedGenreMixes by com.opentune.data.history.MixSnapshots.mixes(com.opentune.data.history.MixSnapshots.GENRES).collectAsState()
+    LaunchedEffect(records.size / 10, artistGenres.size) {
+        val built = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            com.opentune.data.history.GenreMixes.build(records, { artistGenres[com.opentune.data.metadata.ArtistGenres.key(it)] }, hidden = hidden)
+        }
+        val key = com.opentune.data.history.MixSnapshots.GENRES
+        if (built.isNotEmpty() && com.opentune.data.history.MixSnapshots.due(key, built.map { it.id })) {
+            com.opentune.data.history.MixSnapshots.save(key, built)
+        }
+    }
+    // A song or artist hidden since stays out straight away.
+    val genreMixes = remember(savedGenreMixes, hidden) {
+        savedGenreMixes.mapNotNull { m -> hidden.songs(m.songs).takeIf { it.size >= 6 }?.let { m.copy(songs = it) } }
+    }
+    // The artists picked at the welcome count too, so a new install has genres from the start.
+    val followed by com.opentune.data.releases.NewReleases.followed.collectAsState()
+    LaunchedEffect(records.size / 25, hidden, followed.size) {
+        val top = hidden.records(records).groupBy { com.opentune.data.history.Wrapped.mainArtist(it.artist) }
+            .filterKeys { it.isNotBlank() }.toList().sortedByDescending { it.second.size }.take(GENRE_ARTISTS).map { it.first }
+        val picked = followed.sortedByDescending { it.followedAt }.map { it.name }.filterNot { hidden.hidesArtist(it) }
+        val ask = (top + picked).distinct()
+        if (ask.isNotEmpty()) com.opentune.data.metadata.ArtistGenres.learn(ask)
+    }
+    // The daylist, turning over with the part of the day: checked every few minutes, rebuilt
+    // only when the part changes.
+    var daylistPart by remember { mutableStateOf(com.opentune.data.history.Daylist.partAt(System.currentTimeMillis())) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5 * 60_000L)
+            daylistPart = com.opentune.data.history.Daylist.partAt(System.currentTimeMillis())
+        }
+    }
+    val daylist = remember(records, artistGenres, hidden, daylistPart) {
+        com.opentune.data.history.Daylist.build(records, { artistGenres[com.opentune.data.metadata.ArtistGenres.key(it)] }, hidden = hidden)
+    }
+    // Discover: songs not played yet from the radios of each genre's favourites, made once a day.
+    // While history is short, the welcome's artists' top songs stand in as each genre's favourites.
+    val discoverMixes by com.opentune.data.reco.GenreDiscover.mixes.collectAsState()
+    val discoverSeeds = remember(records, artistGenres, hidden, seeds) {
+        val genreOf = { a: String -> artistGenres[com.opentune.data.metadata.ArtistGenres.key(a)] }
+        val fromHistory = com.opentune.data.history.GenreMixes.favourites(records, genreOf, hidden)
+        if (com.opentune.data.reco.HomeSeed.isShort(records.size)) {
+            seeds.forEach { a ->
+                val g = genreOf(a.name) ?: return@forEach
+                fromHistory[g] = (fromHistory[g].orEmpty() + a.top).distinctBy { it.videoId }
+            }
+        }
+        fromHistory
+    }
+    LaunchedEffect(discoverSeeds.keys.toList()) {
+        if (discoverSeeds.isEmpty()) return@LaunchedEffect
+        val played = records.mapTo(HashSet()) { it.videoId } + com.opentune.data.library.LibraryStore.liked.value.map { it.videoId }
+        val known = records.mapTo(HashSet()) { com.opentune.data.history.Wrapped.mainArtist(it.artist) } + followed.map { it.name }
+        com.opentune.data.reco.GenreDiscover.refresh(
+            discoverSeeds, played, hidden,
+            { a -> com.opentune.data.metadata.ArtistGenres.genreOf(a) }, known,
+        ) { com.opentune.data.reco.Recommendations.youtube(it.videoId) }
+    }
+    val discover = remember(discoverMixes, hidden) {
+        discoverMixes.mapNotNull { m -> hidden.songs(m.songs).takeIf { it.size >= 6 }?.let { m.copy(songs = it) } }
+    }
+    val badges = remember(records) { com.opentune.data.history.Streaks.badges(records) }
+    val ui by AppSettings.ui.collectAsState()
+    // Spotify's own mixes for the listener, when Spotify is connected (see SpotifySync).
+    val spotifyConnected by com.opentune.ui.spotify.SpotifyConnection.connected.collectAsState()
+    val spotifyMixesAll by com.opentune.data.spotify.SpotifySync.mixes.collectAsState()
+    val spotifyMixes = remember(spotifyMixesAll, hidden, spotifyConnected, ui.spotifyMixes) {
+        if (!spotifyConnected || !ui.spotifyMixes) emptyList()
+        else spotifyMixesAll.mapNotNull { m ->
+            val songs = hidden.songs(m.songs.map { it.toSong() })
+            if (songs.size < 6) null else com.opentune.data.history.DailyMixes.Mix("spotify:${m.id}", m.name, m.readableDescription, songs)
+        }
+    }
+    val signedIn by AccountStore.signedIn.collectAsState()
+    val account by AccountStore.account.collectAsState()
+    val savedAccounts by AccountStore.accounts.collectAsState()
+    val homeAccount = signedIn to savedAccounts.firstOrNull { it.active }?.id
+    // Switching between two signed-in accounts must refresh recommendations too.
+    var seenAccount by remember { mutableStateOf(homeAccount) }
+    LaunchedEffect(homeAccount) {
+        if (homeAccount != seenAccount) {
+            seenAccount = homeAccount
+            MusicRepository.refreshHomeRecommendations()
+            loader.reload(keepContent = true)
+        }
+    }
+
+    val page = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val app = LocalActivityLifecycle()
+    if (historyOpen) {
+        // Going to another page from inside the list closes it at once, rather
+        // than leaving it over the new page while Home slides away. The app
+        // merely going to the background leaves it open.
+        LaunchedEffect(page, app) {
+            val resumed = androidx.lifecycle.Lifecycle.State.RESUMED
+            combine(page.currentStateFlow, app?.currentStateFlow ?: flowOf(resumed)) { p, a -> a.isAtLeast(resumed) && !p.isAtLeast(resumed) }
+                .first { it }
+            historyOpen = false
+        }
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { historyOpen = false }) {
+            // Frosted behind, like the long-press menus and the other sheets.
+            com.opentune.ui.components.FrostBehind(enabled = !com.opentune.data.settings.AppSettings.ui.collectAsState().value.reduceBlur)
+            if (recents.isEmpty()) Text(com.opentune.ui.theme.tr("Your recently played songs will appear here"), Modifier.padding(24.dp))
+            else Recents(recents, ui.recentsAsGrid, actions) {
+                AppSettings.updateUi { it.copy(recentsAsGrid = !it.recentsAsGrid) }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    // One or two of the big cards below move their cover while the page sits still.
+    val covers = rememberMovingCovers(LocalLayoutDirection.current == LayoutDirection.Rtl, covered)
+    val listState = rememberLazyListState()
+    LaunchedEffect(listState, covers) {
+        snapshotFlow { listState.isScrollInProgress }.collect { covers.pageScrolling = it }
+    }
+    // Home tapped again: back up to the top, and the page refreshes with its pull mark.
+    LaunchedEffect(listState) {
+        com.opentune.ui.TabEvents.reselected.collect { r ->
+            if (r != "home") return@collect
+            if (listState.firstVisibleItemIndex > 12) listState.scrollToItem(6)
+            listState.animateScrollToItem(0)
+            refreshHome()
+        }
+    }
+
+    // Which rows are on, and the order of the ones below Home's top (see homeOrder).
+        val on = runtime.sections.filter { it.enabled }.associateBy { it.id }
+        val showsCommunity = "featured-playlists" in on &&
+            com.opentune.data.config.HomeDismissals.showsPlaylists(runtime.playlists.map { it.id }, closedPlaylists)
+        val personal = buildList {
+            if ("mixes" in on && mixes.isNotEmpty()) add(com.opentune.data.reco.HomeLayout.Personal("mixes", 1.0))
+            if ("mixes" in on && genreMixes.isNotEmpty()) add(com.opentune.data.reco.HomeLayout.Personal("genres", 0.9))
+            if ("mixes" in on && discover.isNotEmpty()) add(com.opentune.data.reco.HomeLayout.Personal("discover", 0.8))
+            if ("spotify-mixes" in on && spotifyMixes.isNotEmpty()) add(com.opentune.data.reco.HomeLayout.Personal("spotify", 0.7))
+            if (showsCommunity) add(com.opentune.data.reco.HomeLayout.Personal("community", 0.3))
+        }
+        val shelves = if ("recommendations" in on && state is UiState.Success) (if (ui.liteMode) feed.cards.take(LITE_SHELVES) else feed.cards) else emptyList()
+        val order = homeOrder(personal, shelves, shuffleTurn)
+        // Shelves without repeats, in the order they're shown: a card already higher up is left off.
+        val shownShelves = remember(order, shelves) {
+            val ids = order.filter { it.startsWith(SHELF_ID) && shelves.getOrNull(it.removePrefix(SHELF_ID).toIntOrNull() ?: -1) != null }
+            val clean = com.opentune.data.reco.HomeLayout.withoutRepeats(ids.map { shelves[it.removePrefix(SHELF_ID).toInt()] })
+            ids.zip(clean).toMap()
+        }
+    com.opentune.ui.components.MarkRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = refreshHome,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        LazyColumn(state = listState, contentPadding = contentPadding, modifier = Modifier.fillMaxSize().nestedScroll(covers.scrollWatch)) {
+            item(key = "top") {
+                // A greeting for the time of day, by name when signed in, with the
+                // account (and settings) one tap away on the right.
+                // Read again each time Home comes back into view: kept from the morning,
+                // it still said good morning at night.
+                val shownAt by page.currentStateFlow.collectAsState()
+                val hour = remember(shownAt.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                    java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                }
+                val greeting = when (hour) {
+                    in 5..11 -> "Good morning"
+                    in 12..16 -> "Good afternoon"
+                    in 17..21 -> "Good evening"
+                    else -> "Late night"
+                }
+                // A name only when there really is one: the signed-in account's, or the
+                // one entered for Listen together. Otherwise the greeting stands alone.
+                val firstName = (account?.name ?: com.opentune.data.together.Together.savedName)
+                    .substringBefore(' ').trim().takeIf { it.isNotBlank() }
+                Column(
+                    Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
+                ) {
+                    // The greeting sits right over the name, the buttons beside the pair.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            if (firstName != null) {
+                                Text(com.opentune.ui.theme.tr(greeting), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    firstName,
+                                    style = MaterialTheme.typography.displaySmall,
+                                    maxLines = 2,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            } else {
+                                Text(com.opentune.ui.theme.tr(greeting), style = MaterialTheme.typography.displaySmall, maxLines = 2)
+                            }
+                        }
+                        if (onRecognize != null) {
+                            GlassIconButton(Icons.Rounded.GraphicEq, "Name a song playing nearby", onRecognize, size = 48.dp)
+                        }
+                        com.opentune.ui.components.WithUpdateDot {
+                            // The account menu (switch, add, manage, Settings) where the shell provides it.
+                            val menu = com.opentune.ui.components.LocalAccountMenu.current
+                            var menuOpen by remember { mutableStateOf(false) }
+                            if (menuOpen && menu != null) com.opentune.ui.components.AccountMenu(menu, onDismiss = { menuOpen = false })
+                            GlassIconButton(Icons.Rounded.Person, "Account and settings", if (menu != null) ({ menuOpen = true }) else onOpenSettings, size = 48.dp) {
+                                val photo = account?.thumbnailUrl
+                                if (photo != null) Artwork(photo, Modifier.size(48.dp), CircleShape)
+                                else Icon(Icons.Rounded.Person, "Account and settings", Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            if (ui.homeStreaks && badges.isNotEmpty()) item(key = "streaks") { StreakPills(badges) }
+            item(key = "festival") { FestivalCard() }
+            itemsIndexed(runtime.banners.filter { platform in it.platforms && it.id !in closedBanners }, key = { _, banner -> "remote-banner:${banner.id}" }) { _, banner ->
+                RemoteBannerCard(banner)
+            }
+            // Home's top stays put: Speed dial, the daylist, Quick picks. Under it, the rows made
+            // for you and YouTube Music's shelves in an order of their own (see HomeLayout).
+            if ("speed-dial" in on && ui.speedDial && speedDial.size >= SPEED_DIAL_MIN) item(key = "speed-dial") {
+                SpeedDialSection(speedDial,
+                    strapline = feed.speedDial?.subtitle?.takeIf { it.isNotBlank() } ?: account?.name?.substringBefore(' ').orEmpty(),
+                    avatarUrl = account?.thumbnailUrl, onItemClick = onItemClick, onOpenAll = onOpenSpeedDial,
+                    title = runtime.title("speed-dial", "Speed dial"))
+            }
+            if ("mixes" in on && daylist != null) item(key = "daylist") {
+                DaylistHero(daylist) {
+                    com.opentune.data.reco.HomeEngagement.record("daylist")
+                    actions.playAll(daylist.songs, 0, false, daylist.title)
+                }
+            }
+            if ("quick-picks" in on) item(key = "quick-picks") {
+                val historyAction: @Composable () -> Unit = {
+                    IconButton(onClick = { historyOpen = true }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Rounded.History, "Recently played", Modifier.size(22.dp))
+                    }
+                }
+                val title = runtime.title("quick-picks", "Quick picks")
+                val picks = freshPicks ?: feed.quickPicks
+                if ((refreshing || picksPending) && freshPicks == null) SongRowPlaceholder()
+                else if (picks != null) QuickPicks(picks.copy(title = title, subtitle = ""), onItemClick, historyAction)
+                else SectionHeader(title, action = historyAction)
+            }
+            order.forEach { id ->
+                when {
+                    id == "mixes" -> item(key = "mixes") {
+                        val seededOnly = mixes.all { it.id.startsWith("seed:") }
+                        MixesShelf(mixes, actions, if (seededOnly) "From the artists you follow, until you've played more" else MIXES_LINE,
+                            title = runtime.title("mixes", "Made for you today"), onPlay = { com.opentune.data.reco.HomeEngagement.record("mixes") })
+                    }
+                    id == "genres" -> item(key = "genre-mixes") {
+                        MixesShelf(genreMixes, actions, GENRE_MIXES_LINE, title = "Your genres", onPlay = { com.opentune.data.reco.HomeEngagement.record("genres") })
+                    }
+                    id == "discover" -> item(key = "discover-mixes") {
+                        MixesShelf(discover, actions, DISCOVER_LINE, title = "Discover by genre", onPlay = { com.opentune.data.reco.HomeEngagement.record("discover") })
+                    }
+                    id == "spotify" -> item(key = "spotifyMixes") {
+                        MixesShelf(spotifyMixes, actions, "Spotify's mixes for you, from your likes and listening there",
+                            title = runtime.title("spotify-mixes", "Made for you on Spotify"), onPlay = { com.opentune.data.reco.HomeEngagement.record("spotify") })
+                    }
+                    id == "community" -> item(key = "featured-playlists") {
+                        HomeShelfView(HomeShelf(runtime.title("featured-playlists", "From the community"), runtime.playlists.map {
+                            ShelfItem(it.title, "OpenTune picks", it.artwork, null, it.browseId)
+                        }), { item -> com.opentune.data.reco.HomeEngagement.record("community"); onItemClick(item) },
+                            songRows = false, covers = covers, coverKey = "featured-playlists", action = {
+                            // Closed until a playlist is added that wasn't there now.
+                            IconButton(onClick = { com.opentune.data.config.HomeDismissals.dismissPlaylists(runtime.playlists.map { it.id }) }, modifier = Modifier.size(48.dp)) {
+                                Icon(Icons.Rounded.Close, "Dismiss", Modifier.size(22.dp))
+                            }
+                        })
+                    }
+                    id.startsWith(SHELF_ID) -> {
+                        val i = id.removePrefix(SHELF_ID).toIntOrNull() ?: return@forEach
+                        val shelf = shownShelves[id] ?: return@forEach
+                        item(key = "shelf:$i:${shelf.title}", contentType = "cards") {
+                            HomeShelfView(shelf, { item ->
+                                com.opentune.data.reco.HomeEngagement.record(com.opentune.data.reco.HomeEngagement.shelfKey(shelf.title))
+                                onItemClick(item)
+                            }, songRows = false, covers = covers, coverKey = "shelf:$i")
+                        }
+                    }
+                }
+            }
+            if ("recommendations" in on) when (val st = state) {
+                is UiState.Loading -> items(3) { ShelfPlaceholder() }
+                is UiState.Error -> item(key = "error") {
+                    ErrorState(st.message, onRetry = { loader.reload() }, modifier = Modifier.padding(top = 24.dp))
+                }
+                else -> Unit
+            }
+        }
+    }
+}
+
+/**
+ * Recently played, from this device's history: a paged list four rows deep,
+ * or a row of covers. The choice is remembered.
+ */
+@Composable
+private fun Recents(songs: List<Song>, asGrid: Boolean, actions: SongActions, onToggleLayout: () -> Unit) {
+    Column {
+        SectionHeader("Recents", action = {
+            IconButton(onClick = onToggleLayout) {
+                Icon(
+                    if (asGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
+                    if (asGrid) "Show as list" else "Show as grid",
+                )
+            }
+        })
+        AnimatedContent(asGrid, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "recents") { grid ->
+            if (grid) {
+                val rowState = rememberLazyListState()
+                LazyRow(
+                    state = rowState,
+                    flingBehavior = rememberSnapFlingBehavior(rowState, snapPosition = SnapPosition.Start),
+                    contentPadding = PaddingValues(horizontal = 10.dp),
+                ) {
+                    itemsIndexed(songs, key = { _, song -> song.videoId }) { i, song ->
+                        ItemCard(song.title, song.artist, song.thumbnailUrl, null, onClick = { actions.playAll(songs, i, false, "Recents") }, explicit = song.isExplicit == true, menu = com.opentune.ui.components.CardMenu.ForSong(song))
+                    }
+                }
+            } else {
+                val pages = rememberPagerState(pageCount = { (songs.size + 3) / 4 })
+                HorizontalPager(
+                    state = pages,
+                    modifier = Modifier.fillMaxWidth().height(64.dp * 4),
+                    verticalAlignment = Alignment.Top,
+                    // Leave the next page's covers peeking at the edge, so it reads as scrollable.
+                    contentPadding = PaddingValues(end = 40.dp),
+                ) { page ->
+                    Column(Modifier.fillMaxWidth()) {
+                        for (i in page * 4 until minOf(page * 4 + 4, songs.size)) {
+                            val song = songs[i]
+                            SongListItem(
+                                song = song,
+                                onClick = { actions.playAll(songs, i, false, "Recents") },
+                                modifier = Modifier.fillMaxWidth().height(64.dp),
+                                isCurrent = song.videoId == actions.currentVideoId,
+                                isPlaying = actions.isPlaying,
+                                onPlayNext = { actions.playNext(song) },
+                                onAddToQueue = { actions.addToQueue(song) },
+                                // A sideways drag changes pages; Play next and
+                                // Add to queue stay in the long-press menu.
+                                swipeToQueue = false,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Songs-only shelves of four or more are laid out as quick picks. */
+private fun HomeShelf.isQuickPicks(): Boolean =
+    items.size >= 4 && items.all { it.videoId != null && it.browseId == null }
+
+/** Home uses a single paged track list followed by collection and track cards. */
+internal data class HomeSections(val quickPicks: HomeShelf?, val cards: List<HomeShelf>, val speedDial: HomeShelf? = null)
+
+/** Fewer picks than this and Speed dial isn't shown: there's too little to go on yet. */
+private const val SPEED_DIAL_MIN = 3
+
+/**
+ * One track list, then collections and varied card shelves. Keep every recommendation.
+ * The picks are the followed artists' seed while there's little history (it's
+ * only made then), else the radio off the last song, else the first songs shelf.
+ */
+internal fun arrangeHomeShelves(shelves: List<HomeShelf>): HomeSections {
+    val all = shelves.filter { it.items.isNotEmpty() }
+    // YouTube Music's Speed dial has its own place at the top, not among the cards.
+    // Known by its title in English, or in any language by the account's photo by its heading.
+    fun isDial(shelf: HomeShelf) = com.opentune.data.history.SpeedDial.isSpeedDial(shelf.title) || shelf.personal
+    val speedDial = all.firstOrNull(::isDial)
+    val available = all.filterNot(::isDial)
+    val pickIndex = listOf(com.opentune.data.reco.HomeSeed.TITLE_PREFIX, "Because you played").firstNotNullOfOrNull { prefix ->
+        available.indexOfFirst { it.isQuickPicks() && it.title.startsWith(prefix, ignoreCase = true) }.takeIf { it >= 0 }
+    } ?: available.indexOfFirst { it.isQuickPicks() }
+    val remaining = available.filterIndexed { index, _ -> index != pickIndex }
+    val (collections, tracks) = remaining.partition { shelf -> shelf.items.any { it.browseId != null } }
+    // Playlist/mix collections first, retaining the provider's order within each kind.
+    val orderedCollections = collections.sortedBy { shelf ->
+        if (shelf.items.any { it.browseId?.startsWith("VL") == true }) 0 else 1
+    }
+    val cards = buildList {
+        for (index in 0 until maxOf(orderedCollections.size, tracks.size)) {
+            orderedCollections.getOrNull(index)?.let(::add)
+            tracks.getOrNull(index)?.let(::add)
+        }
+    }
+    return HomeSections(available.getOrNull(pickIndex), cards, speedDial)
+}
+
+/**
+ * A shelf of cards, or quick picks for a shelf of songs. Given Home's
+ * [covers], its song and album cards can move their covers, under [coverKey].
+ */
+@Composable
+fun HomeShelfView(
+    shelf: HomeShelf, onItemClick: (ShelfItem) -> Unit, modifier: Modifier = Modifier, songRows: Boolean = true, covers: MovingCovers? = null, coverKey: String = "",
+    action: (@Composable () -> Unit)? = null,
+) {
+    Box(modifier) {
+        if (songRows && shelf.isQuickPicks()) {
+            QuickPicks(shelf, onItemClick)
+        } else {
+            if (covers == null) {
+                Shelf(title = shelf.title, subtitle = shelf.subtitle, items = shelf.items, action = action) { item ->
+                    ItemCard(item.title, item.subtitle, item.thumbnailUrl, item.type(), onClick = { onItemClick(item) }, explicit = item.explicit, menu = item.cardMenu())
+                }
+            } else {
+                // By place in the shelf, since a shelf can hold the same item twice.
+                val indexed = remember(shelf.items) { shelf.items.withIndex().toList() }
+                Shelf(title = shelf.title, subtitle = shelf.subtitle, items = indexed, action = action) { (i, item) ->
+                    val type = item.type()
+                    val motion = rememberCoverMotion(
+                        covers,
+                        key = "$coverKey:$i",
+                        shelf = coverKey,
+                        hasMovingArt = MovingCoverRules.hasMovingArt(isSong = item.videoId != null && item.browseId == null, type = type),
+                    )
+                    ItemCard(
+                        item.title, item.subtitle, item.thumbnailUrl, type,
+                        onClick = { onItemClick(item) },
+                        modifier = motion.spot,
+                        explicit = item.explicit,
+                        imageModifier = motion.art,
+                        onArtLoaded = motion.onArtLoaded,
+                        menu = item.cardMenu(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A shelf of single tracks, laid out four rows deep like YouTube Music's quick picks. */
+@Composable
+private fun QuickPicks(shelf: HomeShelf, onItemClick: (ShelfItem) -> Unit, action: (@Composable () -> Unit)? = null) {
+    Column {
+        SectionHeader(shelf.title, subtitle = shelf.subtitle, action = action)
+        val pages = rememberPagerState(pageCount = { (shelf.items.size + 3) / 4 })
+        HorizontalPager(
+            state = pages,
+            modifier = Modifier.fillMaxWidth().height(64.dp * 4),
+            verticalAlignment = Alignment.Top,
+            // The next column's covers peek at the edge, so there's clearly more.
+            contentPadding = PaddingValues(end = 40.dp),
+        ) { page ->
+            Column(Modifier.fillMaxWidth()) {
+                for (item in shelf.items.drop(page * 4).take(4)) {
+                    val song = item.toSong()
+                    if (song != null) {
+                        // The same row as Recents, so each gets the three-dot menu.
+                        SongListItem(
+                            song = song,
+                            onClick = { onItemClick(item) },
+                            modifier = Modifier.fillMaxWidth().height(64.dp),
+                            swipeToQueue = false,
+                        )
+                    } else {
+                        Row(
+                            Modifier.fillMaxWidth().height(64.dp).clickable { onItemClick(item) }.padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Artwork(item.thumbnailUrl.artworkAt(ROW_ART_PX), Modifier.size(48.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+                                com.opentune.ui.components.SubtitleLine(item.subtitle, explicit = item.explicit)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val MIXES_LINE = "Daily mixes from what you play, new each day"
+private const val GENRE_MIXES_LINE = "What you play, sorted by genre, in a new order each day"
+private const val DISCOVER_LINE = "Songs you haven't played, from the radios of your favourites in each genre"
+/** How many of the most played artists have their genre looked up. */
+private const val GENRE_ARTISTS = 40
+
+private const val SHELF_ID = "shelf#"
+
+/**
+ * The order of the rows below Home's top, worked out once when Home opens and again at each pull
+ * to refresh and each new day, so playing from a row doesn't move rows about under the finger.
+ */
+@Composable
+private fun homeOrder(personal: List<com.opentune.data.reco.HomeLayout.Personal>, shelves: List<HomeShelf>, turn: Int): List<String> {
+    val day = remember { java.util.Calendar.getInstance().let { it.get(java.util.Calendar.YEAR) * 1000 + it.get(java.util.Calendar.DAY_OF_YEAR) } }
+    val ids = personal.map { it.id }
+    val titles = shelves.map { it.title }
+    return remember(ids, titles, turn, day) {
+        val counts = com.opentune.data.reco.HomeEngagement.counts.value
+        val keyOf = titles.withIndex().associate { (i, t) -> "$SHELF_ID$i" to com.opentune.data.reco.HomeEngagement.shelfKey(t) }
+        com.opentune.data.reco.HomeLayout.arrange(personal, keyOf.keys.toList(), { id ->
+            com.opentune.data.reco.HomeEngagement.weight(keyOf[id] ?: id, counts)
+        }, seed = day * 1000L + turn)
+    }
+}
+
+/**
+ * The daylist, big, near the top of Home: its name (what's in it and when) over its own covers
+ * mixed together and blurred, the covers themselves beside it, and Play. It changes as the day
+ * goes on, so it's given room. Before Android 12, which can't blur, tiny copies of the covers
+ * stretched to fill give the same soft wash.
+ */
+@Composable
+internal fun DaylistHero(mix: com.opentune.data.history.DailyMixes.Mix, onPlay: () -> Unit) {
+    val covers = mix.covers
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+    val blurs = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    val white = androidx.compose.ui.graphics.Color.White
+    Box(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onPlay),
+    ) {
+        // The covers, two by two across the whole card, blurred into one wash of their colours. Where
+        // there's no blur (before Android 12) the tiles would meet in hard lines, so one cover's tiny
+        // copy, stretched to fill, makes the wash instead, as the playlist pages do there.
+        if (blurs) {
+            Column(
+                Modifier.matchParentSize()
+                    .graphicsLayer { scaleX = 1.35f; scaleY = 1.35f }
+                    .blur(46.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Rectangle),
+            ) {
+                val four = if (covers.isEmpty()) listOf<String?>(null) else List(4) { covers[it % covers.size] }
+                four.chunked(2).forEach { row ->
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        row.forEach { url -> Artwork(url, Modifier.weight(1f).fillMaxHeight(), androidx.compose.ui.graphics.RectangleShape) }
+                    }
+                }
+            }
+        } else {
+            Artwork(covers.firstOrNull().artworkAt(24), Modifier.matchParentSize().graphicsLayer { scaleX = 1.4f; scaleY = 1.4f },
+                androidx.compose.ui.graphics.RectangleShape)
+        }
+        // Darker on the side the words are, so white reads on any covers.
+        Box(
+            Modifier.matchParentSize().background(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    0f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.62f),
+                    0.65f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.38f),
+                    1f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f),
+                ),
+            ),
+        )
+        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("YOUR DAYLIST", style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = white.copy(alpha = 0.75f), letterSpacing = 1.sp)
+                Text(mix.title, style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = white, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                Text(com.opentune.i18n.Tr.f("{0} songs · changes through the day", mix.songs.size), style = MaterialTheme.typography.bodySmall,
+                    color = white.copy(alpha = 0.78f), modifier = Modifier.padding(top = 4.dp))
+                Row(
+                    Modifier.padding(top = 14.dp).clip(CircleShape).background(white).clickable(onClick = onPlay)
+                        .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.PlayArrow, null, tint = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Play", style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        color = androidx.compose.ui.graphics.Color.Black)
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Box(Modifier.size(112.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))) {
+                if (covers.size >= 4) {
+                    Column { for (row in 0..1) Row { for (col in 0..1) Artwork(covers[row * 2 + col], Modifier.size(56.dp), androidx.compose.ui.graphics.RectangleShape) } }
+                } else {
+                    Artwork(covers.firstOrNull(), Modifier.size(112.dp), androidx.compose.ui.graphics.RectangleShape)
+                }
+            }
+        }
+    }
+}
+
+/** Streaks and milestones, small, in one row under the greeting. */
+@Composable
+internal fun StreakPills(badges: List<com.opentune.data.history.Streaks.Badge>) {
+    androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) {
+        items(badges.size) { i ->
+            val (icon, text) = when (val b = badges[i]) {
+                is com.opentune.data.history.Streaks.Badge.DayStreak ->
+                    Icons.Rounded.LocalFireDepartment to com.opentune.i18n.Tr.f("{0}-day streak", b.days)
+                is com.opentune.data.history.Streaks.Badge.NewArtists ->
+                    Icons.Rounded.AutoAwesome to com.opentune.i18n.Tr.f("{0} new artists this week", b.count)
+                is com.opentune.data.history.Streaks.Badge.ArtistHours ->
+                    Icons.Rounded.Headphones to (if (b.hours == 1) com.opentune.i18n.Tr.f("Your first hour of {0}", b.artist)
+                        else com.opentune.i18n.Tr.f("{0} hours of {1}", b.hours, b.artist))
+            }
+            Row(
+                Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(6.dp))
+                Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** Today's mixes from this phone's listening, each a card of four covers. */
+@Composable
+internal fun MixesShelf(
+    mixes: List<com.opentune.data.history.DailyMixes.Mix>,
+    actions: SongActions,
+    line: String = MIXES_LINE,
+    title: String = "Made for you today",
+    /** A mix started from this row, for Home's order. */
+    onPlay: () -> Unit = {},
+) {
+    Column(Modifier.padding(top = 18.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 20.dp),
+        )
+        Text(
+            line,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp),
+        )
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        ) {
+            items(mixes.size, key = { mixes[it].id }) { i ->
+                val mix = mixes[i]
+                MixCard(mix) { onPlay(); actions.playAll(mix.songs, 0, false, mix.title) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MixCard(mix: com.opentune.data.history.DailyMixes.Mix, onClick: () -> Unit) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    // Only the art is cut to the rounded shape: cutting the whole card took the corners
+    // off the first letters of the artists' second line under it.
+    Column(Modifier.width(156.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
+        Box(Modifier.size(156.dp).clip(shape)) {
+            val covers = mix.covers
+            if (covers.size >= 4) {
+                Column {
+                    for (row in 0..1) Row {
+                        for (col in 0..1) Artwork(covers[row * 2 + col], Modifier.size(78.dp), androidx.compose.ui.graphics.RectangleShape)
+                    }
+                }
+            } else {
+                Artwork(covers.firstOrNull(), Modifier.size(156.dp), androidx.compose.ui.graphics.RectangleShape)
+            }
+            // A band of colour at the foot with the mix's name.
+            val accent = MaterialTheme.colorScheme.primary
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0.45f to androidx.compose.ui.graphics.Color.Transparent,
+                            1f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.78f),
+                        ),
+                    ),
+            )
+            Box(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 12.dp).size(width = 28.dp, height = 4.dp).clip(CircleShape).background(accent))
+            Text(
+                mix.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = androidx.compose.ui.graphics.Color.White,
+                maxLines = 2,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 22.dp),
+            )
+        }
+        Text(
+            mix.subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp, bottom = 6.dp),
+        )
+    }
+}
+
+
+/** The activity's own lifecycle, apart from the page's (which also stops when another page covers it). */
+@Composable
+private fun LocalActivityLifecycle(): androidx.lifecycle.Lifecycle? {
+    var c: android.content.Context? = androidx.compose.ui.platform.LocalContext.current
+    while (c is android.content.ContextWrapper && c !is androidx.lifecycle.LifecycleOwner) c = c.baseContext
+    return (c as? androidx.lifecycle.LifecycleOwner)?.lifecycle
+}
+
+/** Home's recommendation shelves in Lite mode: enough to choose from, few enough to stay quick. */
+private const val LITE_SHELVES = 5
