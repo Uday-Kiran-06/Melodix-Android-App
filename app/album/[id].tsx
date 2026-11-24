@@ -29,6 +29,8 @@ export default function AlbumScreen() {
     const activePlaylistDownloads = useLibraryStore(state => state.activePlaylistDownloads);
     const isDark = theme === 'dark';
 
+    const albumId = String(id);
+
     const [album, setAlbum] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,15 @@ export default function AlbumScreen() {
         toggleLike(item, user?.id);
     }, [toggleLike, user?.id]);
 
+    const songs = album?.songs || [];
+    const albumProgress = activePlaylistDownloads[albumId];
+    const isDownloadingAlbum = !!albumProgress;
+    const allDownloaded = songs.length > 0 && songs.every((s: any) => downloadedSongs.some((ds: any) => String(ds.id) === String(s.id)));
+
+    const handleDownloadAlbum = useCallback(() => {
+        downloadService.downloadPlaylist(songs, album?.name || "Album", albumId);
+    }, [songs, album?.name, albumId]);
+
     if (loading) {
         return (
             <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'} pt-12 px-4`}>
@@ -107,17 +118,7 @@ export default function AlbumScreen() {
         );
     }
 
-    const songs = album.songs || [];
     const primaryArtist = album.artists?.primary?.[0]?.name;
-
-    const albumId = String(id);
-    const albumProgress = activePlaylistDownloads[albumId];
-    const isDownloadingAlbum = !!albumProgress;
-    const allDownloaded = songs.length > 0 && songs.every((s: any) => downloadedSongs.some((ds: any) => String(ds.id) === String(s.id)));
-
-    const handleDownloadAlbum = useCallback(() => {
-        downloadService.downloadPlaylist(songs, album?.name || "Album", albumId);
-    }, [songs, album?.name, albumId]);
 
     const renderHeader = () => (
         <View>

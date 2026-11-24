@@ -293,53 +293,59 @@ export default function HomeScreen() {
       { type: 'quick_access', id: 'qa' },
 
       // Trending
-      { type: 'section', id: 'trending',   title: 'Trending Now',                  data: trending,   loading: trendingQuery.isLoading },
+      { type: 'section', id: 'trending',   title: 'Trending Now',                  data: trending,   loading: trendingQuery.isLoading, category: ['All', 'Energize', 'Workout'] },
 
       // Liked-song recommendations (conditional)
-      { type: 'section', id: 'liked_recs', title: 'Recommended for You',          data: likedRecs,  loading: likedRecsQuery.isLoading,  enabled: L(likedRecsQuery.isLoading, likedRecs) },
+      { type: 'section', id: 'liked_recs', title: 'Recommended for You',          data: likedRecs,  loading: likedRecsQuery.isLoading,  enabled: L(likedRecsQuery.isLoading, likedRecs), category: ['All'] },
 
       // Search-based recommendations (conditional)
-      { type: 'section', id: 'smart_recs', title: 'Based on your Search',         data: smartRecs,  loading: smartRecsQuery.isLoading,  enabled: L(smartRecsQuery.isLoading, smartRecs) },
+      { type: 'section', id: 'smart_recs', title: 'Based on your Search',         data: smartRecs,  loading: smartRecsQuery.isLoading,  enabled: L(smartRecsQuery.isLoading, smartRecs), category: ['All'] },
 
       // Top artist 0
-      { type: 'section', id: 'artist_0',   title: `Top Hits • ${artist0}`,        data: artist0Data, loading: artist0Query.isLoading },
+      { type: 'section', id: 'artist_0',   title: `Top Hits • ${artist0}`,        data: artist0Data, loading: artist0Query.isLoading, category: ['All', 'Focus'] },
       // Primary language hits
-      { type: 'section', id: 'lang_prim',  title: `${cap(primaryLang)} Hits`,     data: langHitsPrim, loading: langHitsPrimQuery.isLoading },
+      { type: 'section', id: 'lang_prim',  title: `${cap(primaryLang)} Hits`,     data: langHitsPrim, loading: langHitsPrimQuery.isLoading, category: ['All', 'Focus', 'Relax'] },
 
       // Top artist 1
-      { type: 'section', id: 'artist_1',   title: `Top Hits • ${artist1}`,        data: artist1Data, loading: artist1Query.isLoading },
+      { type: 'section', id: 'artist_1',   title: `Top Hits • ${artist1}`,        data: artist1Data, loading: artist1Query.isLoading, category: ['All'] },
 
       // New releases
-      { type: 'section', id: 'new_rel',    title: `New ${cap(primaryLang)} Releases`, data: newRel, loading: newRelQuery.isLoading },
+      { type: 'section', id: 'new_rel',    title: `New ${cap(primaryLang)} Releases`, data: newRel, loading: newRelQuery.isLoading, category: ['All', 'Energize'] },
 
       // Featured playlists
-      { type: 'section', id: 'playlists',  title: 'Popular Playlists',            data: playlists,  loading: playlistsQuery.isLoading, cardType: 'rectangle' },
+      { type: 'section', id: 'playlists',  title: 'Popular Playlists',            data: playlists,  loading: playlistsQuery.isLoading, cardType: 'rectangle', category: ['All', 'Workout', 'Relax'] },
 
       // Movie albums
-      { type: 'section', id: 'albums',     title: `${cap(primaryLang)} Movie Albums`, data: albums, loading: albumsQuery.isLoading, cardType: 'rectangle' },
+      { type: 'section', id: 'albums',     title: `${cap(primaryLang)} Movie Albums`, data: albums, loading: albumsQuery.isLoading, cardType: 'rectangle', category: ['All', 'Romance'] },
 
       // Top artist 2
-      { type: 'section', id: 'artist_2',   title: `Top Hits • ${artist2}`,        data: artist2Data, loading: artist2Query.isLoading },
+      { type: 'section', id: 'artist_2',   title: `Top Hits • ${artist2}`,        data: artist2Data, loading: artist2Query.isLoading, category: ['All'] },
 
       // Secondary language hits
-      { type: 'section', id: 'lang_sec',   title: `${cap(secondaryLang)} Hits`,   data: langHitsSec, loading: langHitsSecQuery.isLoading },
+      { type: 'section', id: 'lang_sec',   title: `${cap(secondaryLang)} Hits`,   data: langHitsSec, loading: langHitsSecQuery.isLoading, category: ['All'] },
 
       // Mood sections
-      { type: 'section', id: 'romantic',   title: `Romantic ${cap(primaryLang)}`, data: romantic,   loading: romanticQuery.isLoading },
-      { type: 'section', id: 'happy',      title: 'Happy Vibes',                  data: happy,      loading: happyQuery.isLoading },
+      { type: 'section', id: 'romantic',   title: `Romantic ${cap(primaryLang)}`, data: romantic,   loading: romanticQuery.isLoading, category: ['All', 'Romance', 'Relax'] },
+      { type: 'section', id: 'happy',      title: 'Happy Vibes',                  data: happy,      loading: happyQuery.isLoading, category: ['All', 'Energize', 'Workout'] },
 
       // Retro
-      { type: 'section', id: 'retro',      title: `Retro ${cap(primaryLang)} Classics`, data: retro, loading: retroQuery.isLoading },
+      { type: 'section', id: 'retro',      title: `Retro ${cap(primaryLang)} Classics`, data: retro, loading: retroQuery.isLoading, category: ['All', 'Relax', 'Focus'] },
 
       // English (only if user listens to English and not already shown as primary/secondary)
-      ...(showEnglishExtra ? [{ type: 'section', id: 'english', title: 'English Pop Hits', data: english, loading: englishQuery.isLoading }] : []),
+      ...(showEnglishExtra ? [{ type: 'section', id: 'english', title: 'English Pop Hits', data: english, loading: englishQuery.isLoading, category: ['All', 'Workout'] }] : []),
 
       // More hits (bottom)
-      { type: 'section', id: 'more',       title: `More ${cap(primaryLang)} Hits`, data: infiniteSongs.data?.pages[0]?.slice(0, 15) || [], loading: infiniteSongs.isLoading },
+      { type: 'section', id: 'more',       title: `More ${cap(primaryLang)} Hits`, data: infiniteSongs.data?.pages[0]?.slice(0, 15) || [], loading: infiniteSongs.isLoading, category: ['All'] },
     ];
 
-    return sections.filter(s => s.enabled !== false);
+    return sections.filter(s => {
+      if (s.enabled === false) return false;
+      if (activeFilter === 'All') return true;
+      if (s.type === 'quick_access') return true;
+      return s.category ? s.category.includes(activeFilter) : true;
+    });
   }, [
+    activeFilter,
     trending, trendingQuery.isLoading,
     likedRecs, likedRecsQuery.isLoading,
     smartRecs, smartRecsQuery.isLoading,
@@ -438,17 +444,20 @@ export default function HomeScreen() {
   }, [isDark, currentGreeting, gridItems, goSearch, goSong, playTrack, recentlyPlayedItems, renderSection, router]);
 
   const renderFilterChips = () => (
-    <View className="flex-row px-5 mb-6">
-      {['All', 'Music'].map(f => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+      {['All', 'Energize', 'Relax', 'Workout', 'Romance', 'Focus'].map(f => (
         <TouchableOpacity
           key={f}
-          onPress={() => setActiveFilter(f)}
-          className={`px-6 py-2.5 rounded-full mr-2.5 ${activeFilter === f ? 'bg-emerald-500' : isDark ? 'bg-zinc-800' : 'bg-slate-200'}`}
+          onPress={() => {
+            Haptics.selectionAsync();
+            setActiveFilter(f);
+          }}
+          className={`px-5 py-2.5 rounded-full mr-2.5 ${activeFilter === f ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : isDark ? 'bg-zinc-800/90' : 'bg-slate-200'}`}
         >
-          <Text className={`font-bold text-sm ${activeFilter === f ? 'text-black' : isDark ? 'text-zinc-400' : 'text-slate-600'}`}>{f}</Text>
+          <Text className={`font-bold text-xs ${activeFilter === f ? 'text-black' : isDark ? 'text-zinc-300' : 'text-slate-700'}`}>{f}</Text>
         </TouchableOpacity>
       ))}
-    </View>
+    </ScrollView>
   );
 
   const renderHeader = () => (

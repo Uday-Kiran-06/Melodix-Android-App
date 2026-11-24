@@ -43,7 +43,7 @@ interface LibState {
     fetchLibrary: (userId: string) => Promise<void>;
     toggleLike: (song: Song, userId?: string) => Promise<void>;
     isLiked: (songId: string) => boolean;
-    createPlaylist: (name: string, userId: string) => Promise<void>;
+    createPlaylist: (name: string, userId: string) => Promise<any>;
     addSongToPlaylist: (song: Song, playlistId: string, userId: string) => Promise<void>;
     removeSongFromPlaylist: (songId: string, playlistId: string) => Promise<void>;
     isSongInPlaylist: (songId: string, playlistId: string) => boolean;
@@ -441,18 +441,35 @@ export const useLibraryStore = create<LibState>()(
                 return get().likedSongs.some(s => String(s.id) === String(songId));
             },
 
-            createPlaylist: async (name: string, userId: string) => {
-                const { data, error } = await supabase
-                    .from('playlists')
-                    .insert({ name, user_id: userId })
-                    .select()
-                    .single();
+            createPlaylist: async (name: string, userId: string): Promise<any> => {
+                if (userId) {
+                    try {
+                        const { data, error } = await supabase
+                            .from('playlists')
+                            .insert({ name, user_id: userId })
+                            .select()
+                            .single();
 
-                if (data) {
-                    set((state: LibState) => ({ playlists: [...state.playlists, { ...data, songs: [] }] }));
-                } else if (error) {
-                    console.error("Create playlist error:", error);
+                        if (data) {
+                            const newPl = { ...data, songs: [] };
+                            set((state: LibState) => ({ playlists: [...state.playlists, newPl] }));
+                            return newPl;
+                        } else if (error) {
+                            console.error("Create playlist error:", error);
+                        }
+                    } catch (e) {
+                        console.error("Create playlist exception:", e);
+                    }
                 }
+                // Fallback: local playlist
+                const localPlaylist = {
+                    id: `local_playlist_${Date.now()}`,
+                    name,
+                    user_id: userId || 'local_user',
+                    songs: []
+                };
+                set((state: LibState) => ({ playlists: [...state.playlists, localPlaylist] }));
+                return localPlaylist;
             },
 
             addSongToPlaylist: async (song: any, playlistId: string, userId: string) => {
@@ -467,26 +484,28 @@ export const useLibraryStore = create<LibState>()(
                     image: jioSaavnService.sanitizeImageUrl(song.image || song.artwork)
                 };
 
-                const { error } = await supabase
-                    .from('song_playlist_map')
-                    .insert({
-                        playlist_id: playlistId,
-                        song_id: song.id,
-                        song_data: normalizedSong
-                    });
-
-                if (!error) {
-                    const { playlists } = get();
-                    const updatedPlaylists = playlists.map(p => {
-                        if (p.id === playlistId) {
-                            return { ...p, songs: [...(p.songs || []), { song_data: normalizedSong }] };
-                        }
-                        return p;
-                    });
-                    set({ playlists: updatedPlaylists });
-                } else {
-                    console.error("Add to playlist error:", error);
+                if (userId && !playlistId.startsWith('local_playlist_')) {
+                    try {
+                        await supabase
+                            .from('song_playlist_map')
+                            .insert({
+                                playlist_id: playlistId,
+                                song_id: song.id,
+                                song_data: normalizedSong
+                            });
+                    } catch (e) {
+                        console.error("Supabase add to playlist error:", e);
+                    }
                 }
+
+                const { playlists } = get();
+                const updatedPlaylists = playlists.map(p => {
+                    if (p.id === playlistId) {
+                        return { ...p, songs: [...(p.songs || []), { song_data: normalizedSong }] };
+                    }
+                    return p;
+                });
+                set({ playlists: updatedPlaylists });
             },
 
             removeSongFromPlaylist: async (songId: string, playlistId: string) => {

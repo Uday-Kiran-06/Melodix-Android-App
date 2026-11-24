@@ -48,6 +48,10 @@ modules/**/android/build/
 modules/**/android/.cxx/
 modules/**/android/.gradle/
 
+# Native Kotlin repositories
+/opentune/
+/android-native/
+
 # IDEs
 .idea/
 .vscode/

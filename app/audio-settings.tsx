@@ -111,31 +111,58 @@ export default function AudioSettingsScreen() {
 
             <ScrollView className="px-5" showsVerticalScrollIndicator={false}>
 
-                {/* Audio Quality */}
+                {/* Audio Quality & Lossless Option */}
                 <View className="mb-10">
-                    <View className="flex-row items-center mb-5 px-1">
-                        <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
-                            <Activity size={18} color={ACCENT_COLOR} />
+                    <View className="flex-row items-center justify-between mb-5 px-1">
+                        <View className="flex-row items-center">
+                            <View className="w-8 h-8 rounded-lg items-center justify-center bg-emerald-500/20 mr-3">
+                                <Activity size={18} color={ACCENT_COLOR} />
+                            </View>
+                            <View>
+                                <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Audio Fidelity</Text>
+                                <Text className="text-zinc-500 text-xs">Apple Glass Lossless & Streaming Bitrate</Text>
+                            </View>
                         </View>
-                        <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Streaming Quality</Text>
+                        <View className="bg-emerald-500/20 px-2 py-1 rounded-md border border-emerald-500/40">
+                            <Text className="text-emerald-400 text-[10px] font-black uppercase">
+                                {audioQuality === '320kbps' ? 'Lossless Active' : audioQuality}
+                            </Text>
+                        </View>
                     </View>
                     <GlassCard intensity={25} tint={isDark ? 'dark' : 'light'}>
                         <View className="p-5">
-                            <View className="flex-row bg-zinc-900/40 rounded-2xl p-1.5">
-                                {(["96kbps", "160kbps", "320kbps"] as const).map((q) => (
-                                    <TouchableOpacity
-                                        key={q}
-                                        onPress={() => setAudioQuality(q)}
-                                        className={`flex-1 py-3.5 rounded-xl items-center ${audioQuality === q ? 'bg-emerald-600' : 'transparent'}`}
-                                    >
-                                        <Text className={`font-bold ${audioQuality === q ? 'text-white' : 'text-zinc-400'}`}>
-                                            {q === '96kbps' ? 'Basic' : q === '160kbps' ? 'Standard' : 'Extreme'}
-                                        </Text>
-                                        <Text className={`text-[10px] mt-0.5 ${audioQuality === q ? 'text-white/80' : 'text-zinc-600'}`}>{q}</Text>
-                                    </TouchableOpacity>
-                                ))}
+                            <View className="flex-row bg-zinc-900/60 rounded-2xl p-1.5 border border-white/5">
+                                {([
+                                    { q: "48kbps", label: "Saver", desc: "48k" },
+                                    { q: "96kbps", label: "Basic", desc: "96k" },
+                                    { q: "160kbps", label: "High", desc: "160k" },
+                                    { q: "320kbps", label: "Lossless", desc: "320k Studio" },
+                                ] as const).map((tier) => {
+                                    const isSelected = audioQuality === tier.q;
+                                    return (
+                                        <TouchableOpacity
+                                            key={tier.q}
+                                            onPress={() => setAudioQuality(tier.q as any)}
+                                            className={`flex-1 py-3 rounded-xl items-center ${isSelected ? 'bg-emerald-600 shadow-lg shadow-emerald-600/40' : 'transparent'}`}
+                                        >
+                                            <Text className={`font-black text-xs ${isSelected ? 'text-white' : 'text-zinc-400'}`}>
+                                                {tier.label}
+                                            </Text>
+                                            <Text className={`text-[9px] mt-0.5 font-semibold ${isSelected ? 'text-white/90' : 'text-zinc-600'}`}>
+                                                {tier.desc}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </View>
-                            <Text className="text-zinc-500 text-xs mt-4 px-1 text-center font-medium">Higher bitrates require a stable internet connection.</Text>
+                            <View className="mt-4 flex-row items-center px-1">
+                                <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2" />
+                                <Text className="text-zinc-400 text-xs flex-1">
+                                    {audioQuality === '320kbps' 
+                                        ? 'Streaming in uncompressed 320 kbps bit-perfect studio master quality.' 
+                                        : 'Balanced audio stream optimized for bandwidth and connection stability.'}
+                                </Text>
+                            </View>
                         </View>
                     </GlassCard>
                 </View>

@@ -29,6 +29,8 @@ export default function SaavnPlaylistScreen() {
     const activePlaylistDownloads = useLibraryStore(state => state.activePlaylistDownloads);
     const isDark = theme === 'dark';
 
+    const playlistId = String(id);
+
     const [playlist, setPlaylist] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,15 @@ export default function SaavnPlaylistScreen() {
         toggleLike(item, user?.id);
     }, [toggleLike, user?.id]);
 
+    const songs = playlist?.songs || [];
+    const playlistProgress = activePlaylistDownloads[playlistId];
+    const isDownloadingPlaylist = !!playlistProgress;
+    const allDownloaded = songs.length > 0 && songs.every((s: any) => downloadedSongs.some((ds: any) => String(ds.id) === String(s.id)));
+
+    const handleDownloadPlaylist = useCallback(() => {
+        downloadService.downloadPlaylist(songs, playlist?.name || "Playlist", playlistId);
+    }, [songs, playlist?.name, playlistId]);
+
     if (loading) {
         return (
             <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'} pt-12 px-4`}>
@@ -107,15 +118,7 @@ export default function SaavnPlaylistScreen() {
         );
     }
 
-    const songs = playlist.songs || [];
-    const playlistId = String(id);
-    const playlistProgress = activePlaylistDownloads[playlistId];
-    const isDownloadingPlaylist = !!playlistProgress;
-    const allDownloaded = songs.length > 0 && songs.every((s: any) => downloadedSongs.some((ds: any) => String(ds.id) === String(s.id)));
 
-    const handleDownloadPlaylist = useCallback(() => {
-        downloadService.downloadPlaylist(songs, playlist?.name || "Playlist", playlistId);
-    }, [songs, playlist?.name, playlistId]);
 
     const renderHeader = () => (
         <View>

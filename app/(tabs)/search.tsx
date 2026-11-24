@@ -9,6 +9,8 @@ import { useSearch, useSearchAlbums, useSearchPlaylists } from '@/hooks/useMusic
 import { usePlayerStore } from '@/hooks/usePlayerStore';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { jioSaavnService } from '@/services/jiosaavn';
+import { platformImporter } from '@/services/PlatformImporter';
+import { youTubeService, YouTubeSearchResult } from '@/services/YouTubeService';
 import { normalizeTrackTitle, normalizeArtistName } from '@/utils/stringUtils';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -111,7 +113,21 @@ export default function SearchScreen() {
   const { data: playlists, isLoading: playlistsLoading } = useSearchPlaylists(debouncedQuery);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
+    const handler = setTimeout(async () => {
+      const trimmed = (query || '').trim();
+      if (platformImporter.isSupportedUrl(trimmed)) {
+        try {
+          const res = await platformImporter.resolveUrl(trimmed);
+          if (res && res.tracks.length > 0) {
+            const first = res.tracks[0];
+            const resolvedSearch = `${first.title} ${first.artist}`.trim();
+            setDebouncedQuery(resolvedSearch);
+            return;
+          }
+        } catch (e) {
+          console.warn('[Search]: Failed to resolve pasted music URL', e);
+        }
+      }
       setDebouncedQuery(query);
     }, 500);
 
@@ -169,6 +185,31 @@ export default function SearchScreen() {
   const [showAllPlaylists, setShowAllPlaylists] = useState(false);
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<any>(null);
 
+  // YouTube Music search integration
+  const [searchSource, setSearchSource] = useState<'jiosaavn' | 'youtube'>('jiosaavn');
+  const [ytResults, setYtResults] = useState<YouTubeSearchResult[]>([]);
+  const [ytLoading, setYtLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchSource === 'youtube' && debouncedQuery.trim()) {
+      setYtLoading(true);
+      youTubeService.search(debouncedQuery)
+        .then(res => {
+          setYtResults(res);
+          setYtLoading(false);
+        })
+        .catch(() => setYtLoading(false));
+    } else {
+      setYtResults([]);
+    }
+  }, [searchSource, debouncedQuery]);
+
+  const handleYouTubePress = useCallback(async (ytItem: YouTubeSearchResult) => {
+    Haptics.selectionAsync();
+    const song = await youTubeService.convertToSong(ytItem);
+    playTrack(song, [song]);
+  }, [playTrack]);
+
   const listData = useMemo(() => {
     if (!query) {
       const items: any[] = [];
@@ -209,6 +250,14 @@ export default function SearchScreen() {
       }
 
       return items;
+    }
+
+    if (searchSource === 'youtube') {
+      if (ytLoading) return [{ type: 'loading' }];
+      if (debouncedQuery.trim() && ytResults.length === 0) {
+        return [{ type: 'no-results', query: debouncedQuery }];
+      }
+      return ytResults.map(yt => ({ type: 'youtube-song', ...yt }));
     }
 
     if (query !== debouncedQuery) {
@@ -272,10 +321,38 @@ export default function SearchScreen() {
     }
 
     return items;
-  }, [query, recentlyPlayedTracks, songs, albums, playlists, songsLoading, albumsLoading, playlistsLoading, showAllSongs, showAllAlbums, showAllPlaylists]);
+  }, [query, recentlyPlayedTracks, songs, albums, playlists, songsLoading, albumsLoading, playlistsLoading, showAllSongs, showAllAlbums, showAllPlaylists, searchSource, ytResults, ytLoading]);
 
   const renderItem = useCallback(({ item }: any) => {
     switch (item.type) {
+      case 'youtube-song':
+        return (
+          <TouchableOpacity
+            className="mb-3 flex-row items-center p-2.5 rounded-2xl active:opacity-75 bg-zinc-900/40 border border-white/5"
+            onPress={() => handleYouTubePress(item)}
+          >
+            <MusicImage
+              images={item.thumbnail}
+              className="w-14 h-14 rounded-xl mr-3.5 bg-zinc-800"
+            />
+            <View className="flex-1 mr-2">
+              <Text className={`${isDark ? 'text-white' : 'text-slate-800'} font-bold text-sm`} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <View className="flex-row items-center mt-1">
+                <View className="bg-red-600 px-1.5 py-0.5 rounded mr-1.5">
+                  <Text className="text-white text-[8px] font-black uppercase">YouTube</Text>
+                </View>
+                <Text className="text-zinc-400 text-xs flex-1" numberOfLines={1}>
+                  {item.artist} · {item.durationText}
+                </Text>
+              </View>
+            </View>
+            <View className="w-9 h-9 rounded-full bg-emerald-500/15 items-center justify-center border border-emerald-500/30">
+              <Play size={16} color={DesignSystem.colors.primary} fill={DesignSystem.colors.primary} />
+            </View>
+          </TouchableOpacity>
+        );
       case 'suggestion-header':
          return (
             <View className="flex-row items-center mb-4 mt-2">
@@ -390,13 +467,13 @@ export default function SearchScreen() {
       default:
         return null;
     }
-  }, [isDark, handleSongPress, recentlyPlayedTracks, songs, handleToggleLike, handleSearchNavigation, clearRecentlyPlayed]);
+  }, [isDark, handleSongPress, recentlyPlayedTracks, songs, handleToggleLike, handleSearchNavigation, clearRecentlyPlayed, handleYouTubePress]);
 
   return (
     <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-slate-50'} pt-12 px-4`}>
       <Text className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'} mb-6`}>Search</Text>
 
-      <View style={isFocused ? { borderColor: primaryColor, borderWidth: 1 } : undefined} className={`flex-row items-center ${isDark ? 'bg-zinc-900' : 'bg-white border border-slate-200 shadow-sm'} rounded-2xl px-4 py-3 mb-6 transition-all duration-300 ${isFocused && isDark ? 'bg-zinc-800' : ''}`}>
+      <View style={isFocused ? { borderColor: primaryColor, borderWidth: 1 } : undefined} className={`flex-row items-center ${isDark ? 'bg-zinc-900' : 'bg-white border border-slate-200 shadow-sm'} rounded-2xl px-4 py-3 mb-4 transition-all duration-300 ${isFocused && isDark ? 'bg-zinc-800' : ''}`}>
         <SearchIcon size={20} color={isFocused ? primaryColor : (isDark ? "#71717a" : "#64748b")} className="mr-3" />
         <TextInput
           value={query}
@@ -404,7 +481,7 @@ export default function SearchScreen() {
           onSubmitEditing={() => query.trim()}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          placeholder="Songs, albums, or playlists"
+          placeholder={searchSource === 'youtube' ? "Search YouTube & YouTube Music" : "Songs, albums, or playlists"}
           placeholderTextColor={isDark ? "#71717a" : "#94a3b8"}
           className={`flex-1 ${isDark ? 'text-white' : 'text-slate-900'} text-base font-medium`}
           selectionColor={primaryColor}
@@ -414,6 +491,34 @@ export default function SearchScreen() {
             <X size={14} color={isDark ? "#d4d4d8" : "#475569"} />
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Streaming Source Selector (OpenTune style) */}
+      <View className="flex-row mb-4">
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.selectionAsync();
+            setSearchSource('jiosaavn');
+          }}
+          className={`px-4 py-2 rounded-full mr-2.5 flex-row items-center ${searchSource === 'jiosaavn' ? 'bg-emerald-500 shadow-md shadow-emerald-500/30' : isDark ? 'bg-zinc-800' : 'bg-slate-200'}`}
+        >
+          <Sparkles size={12} color={searchSource === 'jiosaavn' ? '#000' : '#a1a1aa'} className="mr-1.5" />
+          <Text className={`text-xs font-bold ${searchSource === 'jiosaavn' ? 'text-black' : isDark ? 'text-zinc-400' : 'text-slate-600'}`}>
+            Studio 320k Lossless
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.selectionAsync();
+            setSearchSource('youtube');
+          }}
+          className={`px-4 py-2 rounded-full flex-row items-center ${searchSource === 'youtube' ? 'bg-red-600 shadow-md shadow-red-600/30' : isDark ? 'bg-zinc-800' : 'bg-slate-200'}`}
+        >
+          <Text className={`text-xs font-black ${searchSource === 'youtube' ? 'text-white' : isDark ? 'text-zinc-400' : 'text-slate-600'}`}>
+            ▶ YouTube Music
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <AnyFlashList
