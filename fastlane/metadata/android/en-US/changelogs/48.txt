@@ -1,0 +1,4 @@
+• Brand new Equalizer "U" official logo & adaptive launcher icon.
+• Borderless "What's this song?" listening orb.
+• Dynamic song accent pull-to-refresh animation.
+• UI polish and performance improvements.
