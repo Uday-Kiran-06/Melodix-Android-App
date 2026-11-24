@@ -26,9 +26,9 @@ data class AppConfig(
     val sections: List<RemoteSection> = RemoteConfigProtocol.sectionIds.map { RemoteSection(it) },
     val banners: List<RemoteBanner> = emptyList(), val playlists: List<RemotePlaylist> = emptyList(),
     val sources: List<RemoteSource>? = null,
-    val github: String = "https://github.com/Uday-Kiran-06/Melodix-Android-App", val discord: String = "https://discord.gg/6udrCVh5n",
-    val web: String = "https://justshivv.github.io/Opentune/player/", val tv: String = "https://justshivv.github.io/Opentune/",
-    val timeoutMs: Long = 8000, val retries: Int = 2, val communityPrompts: Boolean = true,
+    val github: String = "https://github.com/Uday-Kiran-06/Melodix-Android-App", val discord: String = "",
+    val web: String = "https://github.com/Uday-Kiran-06/Melodix-Android-App", val tv: String = "",
+    val timeoutMs: Long = 8000, val retries: Int = 2, val communityPrompts: Boolean = false,
 ) {
     fun title(id: String, fallback: String) = sections.firstOrNull { it.id == id }?.title?.ifBlank { fallback } ?: fallback
 }
@@ -95,7 +95,7 @@ object RemoteConfigProtocol {
 
 /** Configuration is data, never executable code. Device verification has its own fixed trust policy. */
 object RemoteConfig {
-    const val ORIGIN = "https://addon-opentune.rethinknow.in"
+    const val ORIGIN = ""
     private val mutable = MutableStateFlow(AppConfig())
     val state = mutable.asStateFlow()
     val current: AppConfig get() = mutable.value.takeIf { it.expiresAt > System.currentTimeMillis() } ?: AppConfig()

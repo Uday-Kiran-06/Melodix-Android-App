@@ -39,7 +39,7 @@ object LyricsPlus {
         "https://lyricsplus-seven.vercel.app",
         "https://lyrics-plus-backend.vercel.app",
     )
-    private const val USER_AGENT = "OpenTune (+https://github.com/justshivv/Opentune)"
+    private const val USER_AGENT = "Melodix (+https://github.com/Uday-Kiran-06/Melodix-Android-App)"
     /** How long the last good server has before the rest are asked too. */
     private const val HEAD_START_MS = 2_500L
     private const val BUDGET_MS = 9_000L

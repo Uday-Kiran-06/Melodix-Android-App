@@ -209,26 +209,8 @@ fun AppRoot(vm: PlayerViewModel) {
     if (whatsNew.isNotEmpty() && update == null) {
         com.opentune.ui.components.WhatsNewSheet(whatsNew, com.opentune.BuildConfig.VERSION_NAME, onDismiss = { whatsNew = emptyList() })
     }
-    // Once a month each, after some days of use, a GitHub star or Discord invitation,
-    // sliding up above the dock; never over an update or What's new, and not
-    // straight after opening.
-    var invite by remember { mutableStateOf<com.opentune.ui.components.Support.Invite?>(null) }
-    var askStar by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(45_000)
-        invite = com.opentune.ui.components.Support.due(appContext)
-        askStar = invite != null
-    }
-    val starCard: @Composable () -> Unit = {
-        val runtime by com.opentune.data.config.RemoteConfig.state.collectAsState()
-        androidx.compose.animation.AnimatedVisibility(
-            visible = askStar && runtime.communityPrompts && !playerOpen && update == null && whatsNew.isEmpty(),
-            enter = androidx.compose.animation.slideInVertically(spring(dampingRatio = 0.8f, stiffness = 300f)) { it } + fadeIn(),
-            exit = androidx.compose.animation.slideOutVertically(tween(220)) { it } + fadeOut(tween(180)),
-        ) {
-            invite?.let { com.opentune.ui.components.InviteCard(it, onDismiss = { askStar = false }) }
-        }
-    }
+    // Community/support invite prompt disabled.
+    val starCard: @Composable () -> Unit = {}
     update?.let { r ->
         com.opentune.ui.settings.UpdateDialog(
             r,

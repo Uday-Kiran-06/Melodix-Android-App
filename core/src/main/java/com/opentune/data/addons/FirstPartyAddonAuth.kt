@@ -40,12 +40,11 @@ import kotlin.coroutines.resumeWithException
 object FirstPartyAddonAuth {
     class VerificationFailure(message: String, cause: Throwable? = null) : IOException(message, cause)
     /** The add-on on OpenTune's own server (services/lossless-addon/vps); browsers pair through it. */
-    const val ORIGIN = "https://addon-opentune.rethinknow.in"
-    /** The same add-on as a Cloudflare Worker, where it ran first. */
-    const val WORKER_ORIGIN = "https://opentune-lossless-addon.create-a-new-site-with-sites.workers.dev"
-    val ORIGINS = listOf(ORIGIN, WORKER_ORIGIN)
-    private val HOSTS = ORIGINS.map { it.removePrefix("https://") }.toSet()
-    private const val ALIAS = "opentune.addon.attestation.v1"
+    const val ORIGIN = ""
+    const val WORKER_ORIGIN = ""
+    val ORIGINS = emptyList<String>()
+    private val HOSTS = emptySet<String>()
+    private const val ALIAS = "melodix.addon.attestation.v1"
     /** The Worker keeps the key and session made before there were two servers. */
     private fun aliasFor(origin: String) = if (origin == WORKER_ORIGIN) ALIAS else "$ALIAS.${origin.removePrefix("https://")}"
     private val mutexes = ConcurrentHashMap<String, Mutex>()

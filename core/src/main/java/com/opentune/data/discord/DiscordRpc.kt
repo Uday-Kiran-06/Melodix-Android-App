@@ -66,8 +66,8 @@ object DiscordRpc {
 
     private const val GATEWAY = "wss://gateway.discord.gg/?v=10&encoding=json"
     private const val API = "https://discord.com/api/v10"
-    private const val PROJECT_URL = "https://github.com/justshivv/Opentune"
-    private const val APP_NAME = "OpenTune"
+    private const val PROJECT_URL = "https://github.com/Uday-Kiran-06/Melodix-Android-App"
+    private const val APP_NAME = "Melodix"
     private const val LABEL_MAX = 32
     private const val TEXT_MAX = 128
     private const val MIN_RETRY_MS = 1_000L

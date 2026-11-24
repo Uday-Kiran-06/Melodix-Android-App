@@ -59,17 +59,8 @@ object Support {
         p.edit { putLong("lastDay", day); putInt("days", p.getInt("days", 0) + 1) }
     }
 
-    /** The invitation that's due now, if any; the star first when both are. */
-    fun due(context: Context, now: Long = System.currentTimeMillis()): Invite? {
-        if (!com.opentune.data.config.RemoteConfig.current.communityPrompts) return null
-        val p = prefs(context)
-        val other = Invite.entries.maxOf { p.getLong(it.askedKey, 0) }
-        return Invite.entries.firstOrNull { invite ->
-            val asked = p.getLong(invite.askedKey, 0)
-            shouldAsk(p.getBoolean(invite.doneKey, false), p.getInt("days", 0), asked, now, invite.daysBefore) &&
-                (other == asked || now - other >= APART_MS)
-        }
-    }
+    /** The invitation that's due now, if any - disabled. */
+    fun due(context: Context, now: Long = System.currentTimeMillis()): Invite? = null
 
     internal fun shouldAsk(done: Boolean, days: Int, askedAt: Long, now: Long, daysBefore: Int = Invite.STAR.daysBefore): Boolean =
         !done && days >= daysBefore && now - askedAt >= MIN_GAP_MS
@@ -88,41 +79,8 @@ fun SupportDialog(onDismiss: () -> Unit) {
     onDismiss()
 }
 
-/** A dismissible monthly invitation: [Support.Invite.STAR] or [Support.Invite.DISCORD]. */
+/** Invitations disabled. */
 @Composable
 fun InviteCard(invite: Support.Invite, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    androidx.compose.runtime.LaunchedEffect(invite) { Support.answered(context, invite, never = false) }
-    fun open(url: String) {
-        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
-        onDismiss()
-    }
-    val discord = invite == Support.Invite.DISCORD
-    FloatingDialog(
-        onDismissRequest = onDismiss,
-        icon = { if (discord) Icon(com.opentune.ui.settings.discordLogo, null) else Icon(Icons.Rounded.Star, null) },
-        title = { Text(if (discord) "Come say hi on Discord" else "Made for music. Built together.") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    if (discord) "Talk to other listeners, swap add-ons, report bugs and hear about new features first. It's where OpenTune gets shaped."
-                    else "OpenTune is free and open source. A star on GitHub helps more listeners find the app, and takes a second."
-                )
-                androidx.compose.material3.FilledTonalButton(
-                    onClick = { open(if (discord) Support.DISCORD else Support.REPO) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = if (discord) androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                        containerColor = com.opentune.ui.settings.DISCORD_BLURPLE, contentColor = androidx.compose.ui.graphics.Color.White,
-                    ) else androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(),
-                ) {
-                    Icon(if (discord) com.opentune.ui.settings.discordLogo else Icons.Rounded.Star, null, Modifier.size(18.dp))
-                    Text(if (discord) "Join the Discord" else "Star on GitHub", Modifier.padding(start = 8.dp))
-                }
-                androidx.compose.material3.TextButton(onClick = { Support.answered(context, invite, never = true); onDismiss() }) {
-                    Text("Don't show again")
-                }
-            }
-        },
-        confirmButton = { SheetButton("Maybe later", onClick = onDismiss, closes = true) },
-    )
+    onDismiss()
 }

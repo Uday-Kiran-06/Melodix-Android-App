@@ -1833,15 +1833,10 @@ private fun settingsSections(
                                 is UpdateCheck.Result.Failed -> message = com.opentune.i18n.Tr.f("Couldn't check: {0}", r.reason)
                             }
                         }
-                    }, summary = pendingUpdate?.let { com.opentune.i18n.Tr.f("OpenTune {0} is ready to install. You have {1}.", it.version, BuildConfig.VERSION_NAME) } ?: com.opentune.i18n.Tr.f("Current version: {0}", BuildConfig.VERSION_NAME), icon = Icons.Rounded.SystemUpdate, dot = pendingUpdate != null)
+                    }, summary = pendingUpdate?.let { com.opentune.i18n.Tr.f("Melodix {0} is ready to install. You have {1}.", it.version, BuildConfig.VERSION_NAME) } ?: com.opentune.i18n.Tr.f("Current version: {0}", BuildConfig.VERSION_NAME), icon = Icons.Rounded.SystemUpdate, dot = pendingUpdate != null)
                 },
                 Entry("Check for updates automatically", "update new version release auto") {
                     ToggleRow("Check for updates automatically", ui.checkForUpdates, { v -> AppSettings.updateUi { it.copy(checkForUpdates = v) }; com.opentune.data.UpdateCheck.schedule(context) }, summary = "Looks for a new release on GitHub every few hours, in the background too, and offers to install it", icon = Icons.Rounded.SystemUpdate)
-                },
-                Entry("Star on GitHub", "star github rate like") {
-                    NavRow("Star on GitHub", {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, com.opentune.ui.components.Support.REPO.toUri())) }
-                    }, summary = "Star Melodix on GitHub", icon = Icons.Rounded.Star)
                 },
                 Entry("Source code", "github open source license gpl") {
                     NavRow("Source code", {

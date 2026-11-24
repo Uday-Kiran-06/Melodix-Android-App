@@ -23,7 +23,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * acknowledgements and out-of-order retries cannot inflate plays. Up to 30 days offline.
  */
 object Usage {
-    private const val CONFIG = "https://justshivv.github.io/Opentune/usage-config.json"
+    private const val CONFIG = ""
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
     private var prefs: SharedPreferences? = null
