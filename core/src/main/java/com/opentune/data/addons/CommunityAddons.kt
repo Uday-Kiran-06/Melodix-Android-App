@@ -27,12 +27,7 @@ object CommunityAddons {
                 val managed = com.opentune.data.config.RemoteConfig.current.sources
                 val document = if (managed != null) JSONObject().put("sources", org.json.JSONArray().apply {
                     managed.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url).put("enabled", it.enabled)) }
-                }) else {
-                    val config = JSONObject(AddonHttp.bytes(CONFIG, 8192, false).toString(Charsets.UTF_8))
-                    val base = AddonProtocol.url(config.getString("apiBase"))
-                    require(base.host in CATALOG_HOSTS)
-                    JSONObject(AddonHttp.bytes(base.newBuilder().encodedPath("/v1/addons").build().toString(), 65536, false).toString(Charsets.UTF_8))
-                }
+                }) else JSONObject().put("sources", org.json.JSONArray())
                 val sources = document.getJSONArray("sources")
                 require(sources.length() <= 20)
                 val incoming = mutableListOf<AudioAddon>()

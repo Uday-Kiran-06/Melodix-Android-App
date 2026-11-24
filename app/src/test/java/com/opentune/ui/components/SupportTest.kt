@@ -6,14 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SupportTest {
-    @Test fun buildsAUpiLinkWithTheAmountFilledIn() {
-        assertEquals(
-            "upi://pay?pa=whoosthis@axl&pn=OpenTune&am=99.00&cu=INR&tn=Support%20OpenTune",
-            Support.upiLink(99.0),
-        )
-        assertEquals("upi://pay?pa=whoosthis@axl&pn=OpenTune&am=12.50&cu=INR&tn=Support%20OpenTune", Support.upiLink(12.5))
-    }
-
     private fun days(value: Long) = java.util.concurrent.TimeUnit.DAYS.toMillis(value)
 
     @Test fun communityPromptWaitsForFiveDaysOfUse() {

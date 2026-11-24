@@ -34,33 +34,9 @@ import androidx.core.net.toUri
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/** Ways to back the project: a star on GitHub, or money over UPI. */
+/** Ways to back the project: a star on GitHub. */
 object Support {
     val REPO: String get() = com.opentune.data.config.RemoteConfig.current.github
-    const val UPI_ID = "whoosthis@axl"
-    private const val PAYEE = "Melodix"
-    private const val NOTE = "Support Melodix"
-    /** Suggested amounts, in rupees. */
-    val AMOUNTS = listOf(49, 99, 199, 499)
-
-    /**
-     * A UPI payment link for [rupees], which any UPI app opens with the
-     * payee and amount filled in. Built by hand: UPI apps want the "@" in
-     * the address as it is, not percent-encoded.
-     */
-    fun upiLink(rupees: Double): String =
-        "upi://pay?pa=$UPI_ID&pn=$PAYEE&am=${String.format(Locale.ROOT, "%.2f", rupees)}&cu=INR&tn=${NOTE.replace(" ", "%20")}"
-
-    /** Asks which UPI app to pay with, the amount already in. */
-    fun pay(context: Context, rupees: Double) {
-        val view = Intent(Intent.ACTION_VIEW, upiLink(rupees).toUri())
-        try {
-            context.startActivity(Intent.createChooser(view, "Send with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: android.content.ActivityNotFoundException) {
-            com.opentune.data.Pills.error(com.opentune.i18n.Tr.f("No UPI app on this phone. You can send it to {0} from another one.", UPI_ID), context)
-        }
-    }
-
     val DISCORD: String get() = com.opentune.data.config.RemoteConfig.current.discord
 
     /**
@@ -109,46 +85,7 @@ object Support {
 /** A thank-you to the developer: a few suggested sums, or your own, sent from the phone's UPI app. */
 @Composable
 fun SupportDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    var text by remember { mutableStateOf("99") }
-    val rupees = text.toDoubleOrNull()?.takeIf { it >= 1 && it <= 100_000 }
-    FloatingDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Rounded.Favorite, null) },
-        title = { Text("Support OpenTune") },
-        text = {
-            Column {
-                Text("OpenTune has no ads and nothing to sell. If it has added a little something to your days, a small thank-you helps keep it going, and every one is truly appreciated.")
-                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Support.AMOUNTS.forEach { a ->
-                        FilterChip(selected = text == a.toString(), onClick = { text = a.toString() }, label = { Text("₹$a") })
-                    }
-                }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { v -> text = v.filter { it.isDigit() || it == '.' }.take(8) },
-                    singleLine = true,
-                    prefix = { Text("₹") },
-                    label = { Text("Your thank-you") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                Text(
-                    com.opentune.i18n.Tr.f("Goes to {0}", Support.UPI_ID),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        },
-        confirmButton = {
-            SheetButton(
-                rupees?.let { com.opentune.i18n.Tr.f("Send ₹{0}", if (it % 1.0 == 0.0) it.toLong().toString() else String.format(Locale.ROOT, "%.2f", it)) } ?: com.opentune.i18n.Tr.t("Send"),
-                enabled = rupees != null,
-                onClick = { rupees?.let { Support.pay(context, it) }; onDismiss() },
-            )
-        },
-        dismissButton = { SheetButton("Maybe later", onClick = onDismiss, closes = true) },
-    )
+    onDismiss()
 }
 
 /** A dismissible monthly invitation: [Support.Invite.STAR] or [Support.Invite.DISCORD]. */

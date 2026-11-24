@@ -33,36 +33,16 @@ object Usage {
     private val client by lazy { Http.client.newBuilder().callTimeout(8, TimeUnit.SECONDS).build() }
 
     fun init(context: Context) {
-        if (prefs == null) prefs = context.applicationContext.getSharedPreferences("usage_v2", Context.MODE_PRIVATE)
-        if (!BuildConfig.DEBUG) {
-            UsageUploadWorker.schedule(context)
-            // A new installation is counted as soon as there's a network, even if the
-            // app is closed straight away; plays after that wait for the four-hour batch.
-            if (prefs?.getLong("last-report", 0L) == 0L) UsageUploadWorker.scheduleFirst(context)
-        }
+        // Disabled: Zero telemetry or background tracking
     }
-    private val enabled get() = !BuildConfig.DEBUG && AppSettings.ui.value.countUsage && prefs != null
+    private val enabled get() = false
 
-    fun active(now: Long = System.currentTimeMillis()) = record(false, now)
-    fun played(now: Long = System.currentTimeMillis()) = record(true, now)
+    fun active(now: Long = System.currentTimeMillis()) {}
+    fun played(now: Long = System.currentTimeMillis()) {}
 
-    fun consentChanged(enabled: Boolean) {
-        if (enabled) active() else scope.launch { lock.withLock {
-            // Keep the installation ID so opting back in doesn't count another install.
-            // Discard pending uploads while preserving cumulative values already reported.
-            prefs?.edit()?.remove("pending")?.commit()
-        } }
-    }
+    fun consentChanged(enabled: Boolean) {}
 
-    private fun record(play: Boolean, now: Long) {
-        if (!enabled) return
-        scope.launch { lock.withLock {
-            if (!enabled) return@withLock
-            val p = prefs ?: return@withLock
-            persistDaily(p, now, BuildConfig.VERSION_NAME, play) ?: return@withLock
-            sendPending(p, now)
-        } }
-    }
+    private fun record(play: Boolean, now: Long) {}
 
     /** Whether this installation has been counted, or isn't being counted at all (no consent). */
     internal fun counted(): Boolean = !enabled || (prefs?.getLong("last-report", 0L) ?: 0L) > 0L

@@ -7,18 +7,11 @@
     <!-- Casting: finding TVs and speakers on the Wi-Fi. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <!-- Naming a song playing nearby; only asked for when that's used. -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Scanning a TV's sign-in code in the app; only asked for when that's used. -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Approximate only: used once to find radio stations nearby, never kept. -->
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Downloads run as a WorkManager foreground job. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Android 16+: the playing song as a Live Update in the status bar. Granted at install. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- High performance mode asks to be left out of battery saving, so frames aren't throttled. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -29,12 +22,7 @@
     <!-- Local music. -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- "Set as ringtone": changing the default sounds, and on Android 9 and
-         older saving the ringtone's copy to shared storage. -->
-    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    <!-- Installing an update downloaded from GitHub Releases; Android still asks each time. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- The phone's own equalizer, opened from the Equalizer page. -->
     <queries>
@@ -45,11 +33,6 @@
 
     <!-- Nothing here is required hardware. Television has its own app (:tv). -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <uses-feature android:name="android.hardware.microphone" android:required="false" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-    <uses-feature android:name="android.hardware.location" android:required="false" />
-    <uses-feature android:name="android.hardware.location.network" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <!-- OpenTune's own USB DAC driver (Bit-perfect output, direct driver). -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />

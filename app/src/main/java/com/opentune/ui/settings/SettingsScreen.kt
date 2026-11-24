@@ -1838,48 +1838,22 @@ private fun settingsSections(
                 Entry("Check for updates automatically", "update new version release auto") {
                     ToggleRow("Check for updates automatically", ui.checkForUpdates, { v -> AppSettings.updateUi { it.copy(checkForUpdates = v) }; com.opentune.data.UpdateCheck.schedule(context) }, summary = "Looks for a new release on GitHub every few hours, in the background too, and offers to install it", icon = Icons.Rounded.SystemUpdate)
                 },
-                Entry("Count this phone in usage numbers", "anonymous usage statistics analytics counter privacy telemetry") {
-                    ToggleRow(
-                        "Count this phone in usage numbers",
-                        ui.countUsage,
-                        { v -> AppSettings.updateUi { it.copy(countUsage = v) }; com.opentune.data.Usage.consentChanged(v) },
-                        summary = "Shares a random installation ID, app version, active dates and daily play totals. No hardware ID, account or song names. Reinstalls get a new ID; updates keep it.",
-                        icon = Icons.Rounded.Info,
-                    )
-                },
-                Entry("OpenTune community", "github discord community addons developer") { CommunityBanner() },
-                Entry("Support OpenTune", "donate upi pay money tip support developer") {
-                    NavRow("Support OpenTune", { supportDialog = true }, summary = "A small thank-you helps keep OpenTune going", icon = Icons.Rounded.Favorite)
-                },
                 Entry("Star on GitHub", "star github rate like") {
                     NavRow("Star on GitHub", {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, com.opentune.ui.components.Support.REPO.toUri())) }
-                    }, summary = "Helps other people find OpenTune", icon = Icons.Rounded.Star)
+                    }, summary = "Star Melodix on GitHub", icon = Icons.Rounded.Star)
                 },
                 Entry("Source code", "github open source license gpl") {
                     NavRow("Source code", {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/justshivv/Opentune".toUri())) }
-                    }, summary = "github.com/justshivv/Opentune · GPL v3", icon = Icons.Rounded.Code)
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/Uday-Kiran-06/Melodix-Android-App".toUri())) }
+                    }, summary = "github.com/Uday-Kiran-06/Melodix-Android-App · GPL v3", icon = Icons.Rounded.Code)
                 },
-                Entry("justshivv", "github developer creator justshivv") {
+                Entry("Developer", "github developer creator uday") {
                     SettingRow(
-                        "justshivv",
+                        "Uday Kiran",
                         icon = null,
-                        leading = { Artwork("https://avatars.githubusercontent.com/u/78946189?v=4", Modifier.size(28.dp), CircleShape) },
                         trailing = {
-                            IconButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/justshivv".toUri())) } }) {
-                                Icon(githubLogo, "GitHub", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        },
-                    )
-                },
-                Entry("aerluc", "github developer aerluc") {
-                    SettingRow(
-                        "aerluc",
-                        icon = null,
-                        leading = { Artwork("https://avatars.githubusercontent.com/u/122277259?v=4", Modifier.size(28.dp), CircleShape) },
-                        trailing = {
-                            IconButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/aerluc".toUri())) } }) {
+                            IconButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/Uday-Kiran-06".toUri())) } }) {
                                 Icon(githubLogo, "GitHub", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         },

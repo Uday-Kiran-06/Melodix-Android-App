@@ -64,38 +64,15 @@ object UpdateLock {
         apply(versions, latest?.let(::releaseOf))
     }
 
-    /** Checks the releases again, at most once an hour unless [force]d. */
-    suspend fun refresh(context: Context, force: Boolean = false) = withContext(Dispatchers.IO) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val now = System.currentTimeMillis()
-        if (!force && now - prefs.getLong(K_CHECKED, 0) < EVERY_MS) return@withContext
-        val list = runCatching { fetch(SITE_LIST) }.getOrNull()
-            ?: runCatching { fetch(API_LIST) }.onFailure { Log.w(TAG, "Couldn't read the releases: ${it.message}") }.getOrNull()
-            ?: return@withContext
-        val releases = list.mapNotNull { it as? JsonObject }
-            .filter { r -> r.bool("draft") != true && r.bool("prerelease") != true }
-            .mapNotNull { r -> UpdateCheck.parse(r, Build.SUPPORTED_ABIS.toList())?.let { it to r } }
-            // Only Android releases count: a tag with no APK (the iPhone build's) isn't one.
-            .filter { (release, _) -> release.apk != null && release.version.firstOrNull()?.isDigit() == true }
-        if (releases.isEmpty()) return@withContext
-        val versions = releases.map { it.first.version }
-        val newest = releases.maxWithOrNull { a, b -> if (UpdateCheck.isNewer(a.first.version, b.first.version)) 1 else -1 }!!
-        // The site's list carries the release's highlights rather than its full notes.
-        val notes = newest.second["highlights"]?.let { h -> (h as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } }
-            ?.joinToString("\n") { "• $it" }
-        val latest = if (notes != null && newest.first.notes.isBlank()) newest.first.copy(notes = notes) else newest.first
-        prefs.edit {
-            putLong(K_CHECKED, now)
-            putString(K_VERSIONS, versions.joinToString(","))
-            putString(K_LATEST, listOf(latest.version, latest.page, latest.notes, latest.apk?.name, latest.apk?.url, latest.apk?.bytes, latest.sums?.url).joinToString(SEP) { it?.toString().orEmpty() })
-        }
-        apply(versions, latest)
+    /** Checks the releases again - disabled to prevent third-party lockouts. */
+    suspend fun refresh(context: Context, force: Boolean = false) {
+        _behind.value = 0
+        _required.value = null
     }
 
     private fun apply(versions: List<String>, latest: UpdateCheck.Release?) {
-        val count = behind(versions, BuildConfig.VERSION_NAME)
-        _behind.value = count
-        _required.value = latest?.takeIf { count > MAX_BEHIND && UpdateCheck.isNewer(it.version, BuildConfig.VERSION_NAME) }
+        _behind.value = 0
+        _required.value = null
     }
 
     private fun fetch(url: String): JsonArray =

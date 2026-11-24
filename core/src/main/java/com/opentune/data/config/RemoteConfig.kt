@@ -113,23 +113,5 @@ object RemoteConfig {
         val source = requireNotNull(response.body).source(); source.request(100_001); require(source.buffer.size <= 100_000)
         source.readUtf8()
     }
-    suspend fun refresh(force: Boolean = false): Boolean = mutex.withLock {
-        val p = prefs ?: return@withLock false
-        if (mutable.value.expiresAt <= System.currentTimeMillis()) mutable.value = AppConfig()
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (!force && lastAttempt != 0L && now - lastAttempt < 5 * 60_000) return@withLock current.revision > 0
-        lastAttempt = now
-        withContext(Dispatchers.IO) {
-            try {
-                // Bootstrap over the fixed HTTPS origin, then pin the signing key in app storage.
-                // A later key change is refused; restore control.sqlite when moving servers.
-                val key = p.getString("key", null) ?: JSONObject(get("/v1/app-config/key")).getString("publicKey")
-                val envelope = get("/v1/app-config")
-                val config = RemoteConfigProtocol.verify(envelope, key, p.getLong("revision", 0))
-                p.edit().putString("key", key).putString("envelope", envelope).putLong("revision", config.revision).apply()
-                mutable.value = config; true
-            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (_: Exception) { false }
-        }
-    }
+    suspend fun refresh(force: Boolean = false): Boolean = true
 }
