@@ -35,7 +35,7 @@ object Updater {
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri())
 
     private fun dir(context: Context) = File(context.cacheDir, "updates")
-    private val VERSION_IN_NAME = Regex("""^(?:Melodix|Melodix|app)[-_.]v?([0-9][0-9.]*).*?\.apk$""", RegexOption.IGNORE_CASE)
+    private val VERSION_IN_NAME = Regex("""^(?:Melodix|OpenTune|app)[-_.]v?([0-9][0-9.]*).*?\.apk$""", RegexOption.IGNORE_CASE)
 
     /** The version an update APK's file name carries, like 1.0.0 in Melodix-v1.0.0-arm64-v8a.apk. */
     internal fun versionOf(fileName: String): String? = VERSION_IN_NAME.find(fileName)?.groupValues?.get(1)
