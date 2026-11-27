@@ -81,7 +81,7 @@ jobs:
           OPENTUNE_KEYSTORE_PASSWORD: ${{ secrets.OPENTUNE_KEYSTORE_PASSWORD }}
           OPENTUNE_KEY_ALIAS: ${{ secrets.OPENTUNE_KEY_ALIAS }}
           OPENTUNE_KEY_PASSWORD: ${{ secrets.OPENTUNE_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+        run: ./gradlew --no-daemon testDebugUnitTest :app:assembleRelease -PuniversalOnly=true
 
       - name: Verify APK signing and version
         if: steps.version.outputs.skip != 'true'
@@ -89,7 +89,7 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          for apk in app/build/outputs/apk/release/*.apk tv/build/outputs/apk/release/*.apk; do
+          for apk in app/build/outputs/apk/release/*.apk; do
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
             "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | sed -n '1p' > "$RUNNER_TEMP/apk-version.txt"
             grep -F "versionName='${TAG#v}'" "$RUNNER_TEMP/apk-version.txt"
@@ -101,12 +101,7 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           mkdir dist
-          for f in app/build/outputs/apk/release/*.apk; do
-            abi=$(basename "$f" .apk | sed -e 's/^app-//' -e 's/-release$//')
-            cp "$f" "dist/Melodix-${TAG}-${abi}.apk"
-          done
-          # The TV app is its own APK, for Android TV and Google TV.
-          cp tv/build/outputs/apk/release/tv-release.apk "dist/Melodix-TV-${TAG}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/Melodix-${TAG}-universal.apk"
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
 
       - name: GitHub release
