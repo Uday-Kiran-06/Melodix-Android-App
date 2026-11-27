@@ -19,9 +19,9 @@ class DiscordRpcTest {
         val before = System.currentTimeMillis()
         val p = DiscordRpc.presence("token", now())
         val a = p.getJSONArray("activities").getJSONObject(0)
-        // A Listening activity: Discord heads the card "Listening to OpenTune" and draws the progress bar.
+        // A Listening activity: Discord heads the card "Listening to Melodix" and draws the progress bar.
         assertEquals(2, a.getInt("type"))
-        assertEquals("OpenTune", a.getString("name"))
+        assertEquals("Melodix", a.getString("name"))
         assertEquals(0, a.getInt("status_display_type"))
         assertEquals("Labon Ko", a.getString("details"))
         assertEquals("Pritam", a.getString("state"))
