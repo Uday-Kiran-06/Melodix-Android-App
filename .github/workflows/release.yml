@@ -117,9 +117,9 @@ jobs:
         # From main this also creates the tag, on the commit that was built.
         run: |
           if [ -f "docs/releases/${TAG#v}.md" ]; then
-            gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "OpenTune $TAG" --notes-file "docs/releases/${TAG#v}.md"
+            gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Melodix $TAG" --notes-file "docs/releases/${TAG#v}.md"
           else
-            gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "OpenTune $TAG" --generate-notes
+            gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Melodix $TAG" --generate-notes
           fi
 
       - name: Remove signing material
